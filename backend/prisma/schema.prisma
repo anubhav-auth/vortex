@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Domain {
+  id                String             @id @default(cuid())
+  name              String             @unique
+  minMembersDefault Int                @default(2)
+  students          Student[]
+  problemStatements ProblemStatement[]
+  createdAt         DateTime           @default(now())
+}
+
+model Student {
+  id                 String       @id @default(cuid())
+  fullName           String
+  rollNumber         String       @unique
+  email              String       @unique
+  gender             String
+  institution        String
+  domainId           String
+  domain             Domain       @relation(fields: [domainId], references: [id])
+  verificationStatus String       @default("Pending")
+  createdAt          DateTime     @default(now())
+
+  teams   TeamMember[]
+  ledTeam Team?        @relation("TeamLeader")
+}
+
+model ProblemStatement {
+  id               String   @id @default(cuid())
+  title            String
+  domainId         String
+  domain           Domain   @relation(fields: [domainId], references: [id])
+  minDomainMembers Int      @default(2)
+  createdAt        DateTime @default(now())
+
+  teams Team[]
+}
+
+model Team {
+  id                  String           @id @default(cuid())
+  teamName            String
+  psId                String
+  problemStatement    ProblemStatement @relation(fields: [psId], references: [id])
+  leaderId            String           @unique
+  leader              Student          @relation("TeamLeader", fields: [leaderId], references: [id])
+  teamStatus          String           @default("Forming")
+  memberCount         Int              @default(0)
+  femaleCount         Int              @default(0)
+  domainSpecificCount Int              @default(0)
+  createdAt           DateTime         @default(now())
+
+  members     TeamMember[]
+  evaluations Evaluation[]
+  leaderboard Leaderboard?
+}
+
+model TeamMember {
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id])
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id])
+  role      String   @default("Member")
+  addedAt   DateTime @default(now())
+
+  @@id([teamId, studentId])
+}
+
+model Evaluation {
+  id          String   @id @default(cuid())
+  teamId      String
+  team        Team     @relation(fields: [teamId], references: [id])
+  round       Int
+  juryId      String
+  score       Float
+  feedback    String?
+  submittedAt DateTime @default(now())
+}
+
+model Leaderboard {
+  teamId       String  @id
+  team         Team    @relation(fields: [teamId], references: [id])
+  r1Score      Float?
+  r2Score      Float?
+  gfScore      Float?
+  finalScore   Float?
+  rankPosition Int?
+}
