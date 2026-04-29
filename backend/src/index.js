@@ -2,7 +2,10 @@ import { env } from './config/env.js';
 import { prisma } from './config/db.js';
 import express from 'express';
 import cors from 'cors';
-import helmet from 'helmet'; // Security middleware
+import helmet from 'helmet';
+
+// --- Route imports ---
+import domainRoutes from './routes/domains.js';  
 
 const app = express();
 
@@ -12,10 +15,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(helmet());
 
-
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok' });
-});
+// --- Routes ---
+app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
+app.use('/api/domains', domainRoutes);  // ← ADD
 
 // --- 404 ---
 app.use((_req, res) => {
