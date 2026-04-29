@@ -10,9 +10,10 @@ model Domain {
   id                String             @id @default(cuid())
   name              String             @unique
   minMembersDefault Int                @default(2)
+  createdAt         DateTime           @default(now())
+
   students          Student[]
   problemStatements ProblemStatement[]
-  createdAt         DateTime           @default(now())
 }
 
 model Student {
@@ -23,71 +24,96 @@ model Student {
   gender             String
   institution        String
   domainId           String
-  domain             Domain       @relation(fields: [domainId], references: [id])
   verificationStatus String       @default("Pending")
   createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
-  teams   TeamMember[]
-  ledTeam Team?        @relation("TeamLeader")
+  domain             Domain       @relation(fields: [domainId], references: [id], onDelete: Restrict)
+  teams              TeamMember[]
+  ledTeam            Team?        @relation("TeamLeader")
+
+  @@index([domainId])
+  @@index([verificationStatus])
 }
 
 model ProblemStatement {
   id               String   @id @default(cuid())
   title            String
   domainId         String
-  domain           Domain   @relation(fields: [domainId], references: [id])
   minDomainMembers Int      @default(2)
   createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  teams Team[]
+  domain           Domain   @relation(fields: [domainId], references: [id], onDelete: Restrict)
+  teams            Team[]
+
+  @@index([domainId])
 }
 
 model Team {
   id                  String           @id @default(cuid())
   teamName            String
   psId                String
-  problemStatement    ProblemStatement @relation(fields: [psId], references: [id])
   leaderId            String           @unique
-  leader              Student          @relation("TeamLeader", fields: [leaderId], references: [id])
   teamStatus          String           @default("Forming")
   memberCount         Int              @default(0)
   femaleCount         Int              @default(0)
   domainSpecificCount Int              @default(0)
   createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
-  members     TeamMember[]
-  evaluations Evaluation[]
-  leaderboard Leaderboard?
+  problemStatement    ProblemStatement @relation(fields: [psId], references: [id], onDelete: Restrict)
+  leader              Student          @relation("TeamLeader", fields: [leaderId], references: [id], onDelete: Restrict)
+  members             TeamMember[]
+  evaluations         Evaluation[]
+  leaderboard         Leaderboard?
+
+  @@index([psId])
+  @@index([teamStatus])
 }
 
 model TeamMember {
   teamId    String
-  team      Team     @relation(fields: [teamId], references: [id])
   studentId String
-  student   Student  @relation(fields: [studentId], references: [id])
   role      String   @default("Member")
   addedAt   DateTime @default(now())
 
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Restrict)
+
   @@id([teamId, studentId])
+  @@index([studentId])
 }
 
+// One score per (team, round, jury). Re-submission = upsert on @@unique.
 model Evaluation {
   id          String   @id @default(cuid())
   teamId      String
-  team        Team     @relation(fields: [teamId], references: [id])
   round       Int
   juryId      String
   score       Float
   feedback    String?
   submittedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, round, juryId])
+  @@index([round])
+  @@index([teamId, round])
 }
 
 model Leaderboard {
-  teamId       String  @id
-  team         Team    @relation(fields: [teamId], references: [id])
+  teamId       String   @id
   r1Score      Float?
   r2Score      Float?
   gfScore      Float?
   finalScore   Float?
   rankPosition Int?
+  updatedAt    DateTime @updatedAt
+
+  team         Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([finalScore])
+  @@index([rankPosition])
 }

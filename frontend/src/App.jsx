@@ -7,6 +7,7 @@ import PassengerManifest from './pages/PassengerManifest/PassengerManifest';
 import FormCrew from './pages/CrewDashboard/FormCrew';
 import JoinCrew from './pages/CrewDashboard/JoinCrew';
 import LeaderboardPage from './pages/Leaderboard/LeaderboardPage';
+import AwardsPage from './pages/Awards/AwardsPage';
 
 const App = () => {
   return (
@@ -24,6 +25,7 @@ const App = () => {
               <Route path="/crew/form" element={<FormCrew />} />
               <Route path="/crew/join" element={<JoinCrew />} />
               <Route path="/leaderboard" element={<LeaderboardPage />} />
+              <Route path="/awards" element={<AwardsPage />} />
             </Routes>
           </div>
         </main>

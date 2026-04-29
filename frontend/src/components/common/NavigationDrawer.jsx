@@ -31,6 +31,10 @@ const NavigationDrawer = () => {
           <span className="material-symbols-outlined">engineering</span>
           <span>Form a Crew</span>
         </Link>
+        <Link to="/awards" className={getLinkClasses('/awards')}>
+          <span className="material-symbols-outlined">emoji_events</span>
+          <span>Awards</span>
+        </Link>
       </nav>
     </aside>
   );

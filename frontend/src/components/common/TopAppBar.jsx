@@ -27,6 +27,9 @@ const TopAppBar = () => {
           <Link to="/leaderboard" className={`transition-colors ${location.pathname === '/leaderboard' ? 'text-[#00408B] border-b-2 border-[#00408B] pb-1' : 'hover:text-[#00408B] pb-1'}`}>
             LEADERBOARD
           </Link>
+          <Link to="/awards" className={`transition-colors ${location.pathname === '/awards' ? 'text-[#00408B] border-b-2 border-[#00408B] pb-1' : 'hover:text-[#00408B] pb-1'}`}>
+            AWARDS
+          </Link>
         </nav>
       </div>
         
