@@ -1,38 +1,39 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
 import NavigationDrawer from '../../components/common/NavigationDrawer';
 import MachinedCard from '../../components/common/MachinedCard';
 import TrackDivider from '../../components/common/TrackDivider';
 
 // Mock Data
-const MOCK_CURRENT_USER = {
-  id: 'u1',
-  name: 'Arjun Sharma',
-  domain: 'AI/ML',
-  gender: 'Male',
-  isShortlisted: true
-};
-
 const MOCK_CANDIDATES = [
-  { id: 'u2', name: 'Priya Patel', domain: 'AI/ML', gender: 'Female', tech: 'Python, TensorFlow' },
-  { id: 'u3', name: 'Rahul Singh', domain: 'AI/ML', gender: 'Male', tech: 'PyTorch, SQL' },
-  { id: 'u4', name: 'Neha Gupta', domain: 'Web', gender: 'Female', tech: 'React, Tailwind' },
-  { id: 'u5', name: 'Vikram Das', domain: 'AI/ML', gender: 'Male', tech: 'OpenCV, C++' },
+  { id: 'u2', name: 'Priya Patel', domain: 'AI/ML', gender: 'Female' },
+  { id: 'u3', name: 'Rahul Singh', domain: 'AI/ML', gender: 'Male' },
+  { id: 'u4', name: 'Neha Gupta', domain: 'Web', gender: 'Female' },
+  { id: 'u5', name: 'Vikram Das', domain: 'Cloud', gender: 'Male' },
+  { id: 'u6', name: 'Sneha Rao', domain: 'Web', gender: 'Female' },
+  { id: 'u7', name: 'Rohan Kumar', domain: 'IoT', gender: 'Male' },
 ];
 
-const CrewDashboard = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [teamMembers, setTeamMembers] = useState([MOCK_CURRENT_USER]);
+const MOCK_INVITES = [
+  { id: 'inv1', teamName: 'Alpha Tech', from: 'Karan Sharma', domain: 'AI/ML' }
+];
+
+const CrewDashboard = ({ user }) => {
+  const currentUser = user ? { id: 'u0', name: user.fullName, domain: user.domain, gender: user.gender } : { id: 'u1', name: 'Arjun Sharma', domain: 'AI/ML', gender: 'Male' };
+
+  const [teamMembers, setTeamMembers] = useState([currentUser]);
   const [problemStatement, setProblemStatement] = useState('');
   const [isLocked, setIsLocked] = useState(false);
-  const [candidates, setCandidates] = useState(MOCK_CANDIDATES.filter(c => c.domain === MOCK_CURRENT_USER.domain));
+  const [candidates, setCandidates] = useState(MOCK_CANDIDATES);
+  const [invites, setInvites] = useState(MOCK_INVITES);
+  
+  // Domain Filter State
+  const [selectedDomain, setSelectedDomain] = useState('All');
 
   const hasFemaleMember = teamMembers.some(member => member.gender === 'Female');
 
   const addMember = (candidate) => {
     if (isLocked) return;
-    if (candidate.domain !== MOCK_CURRENT_USER.domain) {
+    if (candidate.domain !== currentUser.domain) {
       alert("Cannot add member from a different domain!");
       return;
     }
@@ -42,7 +43,7 @@ const CrewDashboard = () => {
 
   const removeMember = (member) => {
     if (isLocked) return;
-    if (member.id === MOCK_CURRENT_USER.id) {
+    if (member.id === currentUser.id) {
       alert("You cannot remove yourself from your own team.");
       return;
     }
@@ -63,53 +64,72 @@ const CrewDashboard = () => {
     alert("Team Locked Successfully!");
   };
 
+  const acceptInvite = (invite) => {
+    alert(`Accepted invite from ${invite.teamName}!`);
+    setInvites(invites.filter(i => i.id !== invite.id));
+  };
+
+  const rejectInvite = (invite) => {
+    setInvites(invites.filter(i => i.id !== invite.id));
+  };
+
+  const filteredCandidates = candidates.filter(c => selectedDomain === 'All' || c.domain === selectedDomain);
+
   return (
     <div className="flex w-full h-full">
       <NavigationDrawer />
       
-      <main className="flex-1 lg:ml-64 p-8 bg-surface flex justify-center">
+      <main className="flex-1 lg:ml-64 p-4 md:p-8 bg-surface flex justify-center">
         <div className="w-full max-w-7xl">
-          {/* Sub-Navigation Tabs */}
-          <div className="flex border-b border-slate-300 mb-8">
-            <button 
-              onClick={() => navigate('/crew/join')}
-              className={`px-8 py-4 font-bold uppercase tracking-widest text-sm transition-colors border-b-4 ${location.pathname === '/crew/join' ? 'border-[#00408B] text-[#00408B] bg-blue-50' : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-[#00408B]'}`}
-            >
-              Join a Crew
-            </button>
-            <button 
-              onClick={() => navigate('/crew/form')}
-              className={`px-8 py-4 font-bold uppercase tracking-widest text-sm transition-colors border-b-4 ${location.pathname === '/crew/form' || location.pathname === '/crew' ? 'border-[#00408B] text-[#00408B] bg-blue-50' : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-[#00408B]'}`}
-            >
-              Form a Crew
-            </button>
-          </div>
-
           <div className="mb-10">
           <div className="flex items-center gap-3 text-secondary uppercase font-headline-sm font-bold tracking-tighter">
-            <span className="material-symbols-outlined">engineering</span>
-            PHASE 2 EVALUATION
+            <span className="material-symbols-outlined">badge</span>
+            USER PORTAL
           </div>
-          <h2 className="font-headline-lg text-primary uppercase leading-tight mt-2">Team Assembly Lock</h2>
+          <h2 className="font-headline-lg text-primary uppercase leading-tight mt-2">Welcome, {currentUser.name.split(' ')[0]}</h2>
           <TrackDivider className="w-48 mt-4" />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
           
-          {/* Left Column: Team Management */}
-          <div className="lg:col-span-8 space-y-8">
-            <MachinedCard accent className="p-8">
-              <div className="flex justify-between items-center mb-6">
+          {/* Left Column: Invites & Team Management */}
+          <div className="xl:col-span-8 space-y-8">
+            
+            {/* Invites Section */}
+            {invites.length > 0 && (
+              <MachinedCard accent className="p-6 border-l-4 border-secondary">
+                <h3 className="font-headline-md text-primary uppercase mb-4 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-secondary">mail</span> Pending Invites
+                </h3>
+                <div className="space-y-4">
+                  {invites.map(invite => (
+                    <div key={invite.id} className="bg-surface-container p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                      <div>
+                        <p className="font-label-md text-primary uppercase">{invite.teamName}</p>
+                        <p className="font-body-sm text-slate-500">From: {invite.from} • Domain: {invite.domain}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => acceptInvite(invite)} className="bg-primary text-white px-4 py-2 font-label-sm uppercase hover:bg-[#002b61] transition-colors">Accept</button>
+                        <button onClick={() => rejectInvite(invite)} className="border border-slate-300 text-slate-600 px-4 py-2 font-label-sm uppercase hover:bg-slate-100 transition-colors">Decline</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </MachinedCard>
+            )}
+
+            <MachinedCard accent className="p-6 md:p-8">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 gap-4">
                 <div>
-                  <h3 className="font-headline-md text-primary uppercase">Your Crew</h3>
-                  <p className="font-body-md text-on-surface-variant">Domain: <span className="font-bold text-[#00408B]">{MOCK_CURRENT_USER.domain}</span></p>
+                  <h3 className="font-headline-md text-primary uppercase">Form a Crew</h3>
+                  <p className="font-body-md text-on-surface-variant">Domain: <span className="font-bold text-[#00408B]">{currentUser.domain}</span></p>
                 </div>
                 {isLocked ? (
-                  <span className="bg-primary text-white px-4 py-2 font-label-md uppercase shadow flex items-center gap-2">
+                  <span className="bg-primary text-white px-4 py-2 font-label-md uppercase shadow flex items-center gap-2 w-max">
                     <span className="material-symbols-outlined">lock</span> LOCKED
                   </span>
                 ) : (
-                  <span className="bg-secondary-container text-on-secondary-container px-4 py-2 font-label-md uppercase border border-secondary">
+                  <span className="bg-secondary-container text-on-secondary-container px-4 py-2 font-label-md uppercase border border-secondary w-max">
                     ASSEMBLING
                   </span>
                 )}
@@ -119,16 +139,16 @@ const CrewDashboard = () => {
                 {teamMembers.map((member) => (
                   <div key={member.id} className="flex justify-between items-center bg-surface-container p-4 border-l-4 border-[#00408B]">
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center border border-slate-300">
+                      <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center border border-slate-300 flex-shrink-0">
                         <span className="material-symbols-outlined text-slate-500">person</span>
                       </div>
-                      <div>
-                        <p className="font-label-md text-primary uppercase">{member.name} {member.id === MOCK_CURRENT_USER.id && '(Leader)'}</p>
+                      <div className="overflow-hidden">
+                        <p className="font-label-md text-primary uppercase truncate">{member.name} {member.id === currentUser.id && '(Leader)'}</p>
                         <p className="font-label-sm text-slate-500">{member.gender}</p>
                       </div>
                     </div>
-                    {!isLocked && member.id !== MOCK_CURRENT_USER.id && (
-                      <button onClick={() => removeMember(member)} className="text-error hover:bg-error-container p-2 transition-colors flex items-center justify-center">
+                    {!isLocked && member.id !== currentUser.id && (
+                      <button onClick={() => removeMember(member)} className="text-error hover:bg-error-container p-2 transition-colors flex items-center justify-center flex-shrink-0">
                         <span className="material-symbols-outlined">person_remove</span>
                       </button>
                     )}
@@ -149,14 +169,14 @@ const CrewDashboard = () => {
               </div>
 
               {!isLocked && (
-                <div className="mt-8 pt-6 border-t border-slate-200 flex items-center justify-between">
+                <div className="mt-8 pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div className={`flex items-center gap-2 ${hasFemaleMember ? 'text-secondary' : 'text-error'}`}>
                     <span className="material-symbols-outlined">{hasFemaleMember ? 'check_circle' : 'warning'}</span>
-                    <span className="font-label-md uppercase">Diversity Rule: {hasFemaleMember ? 'Met' : 'Unmet (Need 1 Female)'}</span>
+                    <span className="font-label-md uppercase">Diversity: {hasFemaleMember ? 'Met' : 'Need 1 Female'}</span>
                   </div>
                   <button 
                     onClick={lockTeam}
-                    className="bg-[#00408B] text-white px-8 py-3 font-label-md uppercase flex items-center gap-2 hover:bg-primary transition-colors"
+                    className="w-full sm:w-auto bg-[#00408B] text-white px-8 py-3 font-label-md uppercase flex items-center justify-center gap-2 hover:bg-primary transition-colors"
                   >
                     <span>Finalize Team</span>
                     <span className="material-symbols-outlined">done_all</span>
@@ -166,30 +186,49 @@ const CrewDashboard = () => {
             </MachinedCard>
           </div>
 
-          {/* Right Column: Shortlisted Candidates */}
-          <div className="lg:col-span-4">
-            <MachinedCard className="p-6 h-full border-t-4 border-slate-300">
-              <h3 className="font-headline-md text-primary uppercase text-xl mb-2">Available Passengers</h3>
-              <p className="font-body-md text-sm text-on-surface-variant mb-6">Shortlisted candidates in {MOCK_CURRENT_USER.domain}</p>
+          {/* Right Column: Passenger Manifest */}
+          <div className="xl:col-span-4 mt-8 xl:mt-0">
+            <MachinedCard className="p-6 h-full border-t-4 border-slate-300 flex flex-col">
+              <h3 className="font-headline-md text-primary uppercase text-xl mb-2">Passenger Manifest</h3>
               
-              {candidates.length === 0 ? (
-                <p className="text-center font-body-md text-slate-500 py-8">No more candidates available.</p>
+              <div className="mb-6">
+                <label className="font-label-sm text-slate-500 uppercase block mb-1">Filter by Domain</label>
+                <select 
+                  value={selectedDomain} 
+                  onChange={(e) => setSelectedDomain(e.target.value)}
+                  className="w-full bg-surface border border-slate-300 p-2 font-body-md outline-none focus:border-[#00408B]"
+                >
+                  <option value="All">All Domains</option>
+                  <option value="AI/ML">AI/ML</option>
+                  <option value="Web">Web</option>
+                  <option value="Cloud">Cloud</option>
+                  <option value="IoT">IoT</option>
+                </select>
+              </div>
+              
+              {filteredCandidates.length === 0 ? (
+                <p className="text-center font-body-md text-slate-500 py-8">No passengers found in this domain.</p>
               ) : (
-                <div className="space-y-4">
-                  {candidates.map(candidate => (
+                <div className="space-y-4 overflow-y-auto pr-2" style={{ maxHeight: '600px' }}>
+                  {filteredCandidates.map(candidate => (
                     <div key={candidate.id} className="bg-white border border-slate-200 p-4 shadow-sm hover:shadow-md transition-shadow">
-                      <p className="font-label-md text-primary uppercase mb-1">{candidate.name}</p>
-                      <div className="flex justify-between items-center mb-4">
-                        <p className="font-label-sm text-slate-500">{candidate.gender}</p>
-                        <p className="font-bold text-[10px] bg-blue-50 text-[#00408B] px-2 py-1 rounded-sm">{candidate.tech}</p>
+                      <div className="flex justify-between items-start mb-2">
+                        <p className="font-label-md text-primary uppercase">{candidate.name}</p>
+                        <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-1 font-bold uppercase">{candidate.domain}</span>
                       </div>
+                      <p className="font-label-sm text-slate-500 mb-4">{candidate.gender}</p>
                       
                       <button 
-                        disabled={isLocked}
+                        disabled={isLocked || candidate.domain !== currentUser.domain}
                         onClick={() => addMember(candidate)}
-                        className={`w-full py-2 font-label-md uppercase border ${isLocked ? 'opacity-50 border-slate-300 text-slate-400' : 'border-[#00408B] text-[#00408B] hover:bg-[#00408B] hover:text-white'} transition-colors`}
+                        className={`w-full py-2 font-label-md uppercase border transition-colors ${
+                          isLocked || candidate.domain !== currentUser.domain 
+                            ? 'opacity-50 border-slate-300 text-slate-400 cursor-not-allowed' 
+                            : 'border-[#00408B] text-[#00408B] hover:bg-[#00408B] hover:text-white'
+                        }`}
+                        title={candidate.domain !== currentUser.domain ? "Must be from same domain" : ""}
                       >
-                        Recruit
+                        {candidate.domain !== currentUser.domain ? 'Domain Mismatch' : 'Recruit'}
                       </button>
                     </div>
                   ))}

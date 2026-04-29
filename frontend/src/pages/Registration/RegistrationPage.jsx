@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import MachinedCard from '../../components/common/MachinedCard';
 import TrackDivider from '../../components/common/TrackDivider';
 
-const RegistrationPage = () => {
+const RegistrationPage = ({ onRegister }) => {
   const [formData, setFormData] = useState({
     fullName: '',
     campus: '',
@@ -10,17 +10,31 @@ const RegistrationPage = () => {
     domain: '',
     email: '',
     phone: '',
-    gender: ''
+    gender: '',
+    linkedin: '',
+    github: '',
+    bio: '',
+    profilePic: ''
   });
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setFormData({ ...formData, profilePic: url });
+    }
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     console.log('Form Submitted:', formData);
-    alert('Registration Successful! (Mocked)');
+    if (onRegister) {
+      onRegister(formData);
+    }
   };
 
   return (
@@ -118,6 +132,26 @@ const RegistrationPage = () => {
                   <option value="Other">Other</option>
                 </select>
               </div>
+              <div className="space-y-1">
+                <label className="font-label-md text-primary uppercase block text-xs">Profile Picture</label>
+                <input type="file" accept="image/*" onChange={handleFileChange} className="w-full bg-white border border-slate-200 focus:border-[#00408B] focus:ring-1 focus:ring-[#00408B] px-4 py-2 font-body-md transition-all outline-none text-slate-500 file:mr-4 file:py-1 file:px-3 file:border-0 file:text-xs file:font-bold file:uppercase file:bg-blue-50 file:text-[#00408B] hover:file:bg-blue-100" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-1">
+                <label className="font-label-md text-primary uppercase block text-xs">LinkedIn Profile URL</label>
+                <input type="url" name="linkedin" value={formData.linkedin} onChange={handleChange} className="w-full bg-white border border-slate-200 focus:border-[#00408B] focus:ring-1 focus:ring-[#00408B] px-4 py-3 font-body-md transition-all outline-none" placeholder="https://linkedin.com/in/username" />
+              </div>
+              <div className="space-y-1">
+                <label className="font-label-md text-primary uppercase block text-xs">GitHub Profile URL</label>
+                <input type="url" name="github" value={formData.github} onChange={handleChange} className="w-full bg-white border border-slate-200 focus:border-[#00408B] focus:ring-1 focus:ring-[#00408B] px-4 py-3 font-body-md transition-all outline-none" placeholder="https://github.com/username" />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="font-label-md text-primary uppercase block text-xs">Short Bio</label>
+              <textarea name="bio" value={formData.bio} onChange={handleChange} rows="2" className="w-full bg-white border border-slate-200 focus:border-[#00408B] focus:ring-1 focus:ring-[#00408B] px-4 py-3 font-body-md transition-all outline-none" placeholder="Tell us a little about your technical background and interests..."></textarea>
             </div>
 
             <div className="pt-8">
