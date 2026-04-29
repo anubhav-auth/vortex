@@ -7,7 +7,7 @@ import helmet from 'helmet';
 import domainRoutes from './routes/domains.js';
 import awardRoutes from './routes/awards.js';  
 import studentRoutes from './routes/students.js';
-
+import teamRoutes from './routes/teams.js'; 
 const app = express();
 
 app.use(cors());
@@ -18,7 +18,8 @@ app.use(helmet());
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 app.use('/api/domains', domainRoutes);
 app.use('/api/awards', awardRoutes); 
-app.use('/api', studentRoutes);              
+app.use('/api', studentRoutes);   
+app.use('/api/teams', teamRoutes);            
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Route not found' });
