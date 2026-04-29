@@ -138,8 +138,12 @@ const ManifestPage = ({ candidates, teamMembers, user, sentInvites, setSentInvit
               </button>
               
               <div className="mb-6 flex items-center justify-center flex-col pt-4">
-                <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center border-4 border-slate-200 mb-4">
-                  <span className="material-symbols-outlined text-5xl text-slate-400">person</span>
+                <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center overflow-hidden border-4 border-[#00408B] mb-4">
+                  {candidate.profilePic ? (
+                    <img src={candidate.profilePic} alt={candidate.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="material-symbols-outlined text-5xl text-slate-400">person</span>
+                  )}
                 </div>
                 <h3 className="font-headline-md text-primary uppercase text-3xl text-center">{candidate.name}</h3>
                 <div className="flex items-center gap-2 mt-2">
@@ -150,14 +154,35 @@ const ManifestPage = ({ candidates, teamMembers, user, sentInvites, setSentInvit
 
               <TrackDivider className="w-full mb-6" />
 
-              <div className="space-y-4 mb-8 text-center px-4">
+              <div className="space-y-4 mb-6 text-center px-4">
                 <p className="font-body-lg text-slate-600 leading-relaxed">
                   "{candidate.bio || "This passenger has not provided a biography yet."}"
                 </p>
                 {candidate.registrationId && (
-                  <p className="font-label-sm text-slate-400 uppercase tracking-widest mt-4">
+                  <p className="font-label-sm text-[#00408B] uppercase tracking-widest mt-4 font-bold">
                     Reg ID: {candidate.registrationId}
                   </p>
+                )}
+              </div>
+
+              <div className="flex justify-center gap-4 mb-8">
+                {candidate.linkedin ? (
+                  <a href={candidate.linkedin} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm font-bold text-[#00408B] hover:text-blue-500 hover:underline transition-colors uppercase border border-slate-200 px-3 py-2 bg-slate-50 hover:bg-white rounded">
+                    <span className="material-symbols-outlined text-[18px]">link</span> LinkedIn
+                  </a>
+                ) : (
+                  <span className="flex items-center gap-2 text-sm font-bold text-slate-400 uppercase border border-slate-200 px-3 py-2 bg-slate-50 rounded cursor-not-allowed">
+                    <span className="material-symbols-outlined text-[18px]">link_off</span> No LinkedIn
+                  </span>
+                )}
+                {candidate.github ? (
+                  <a href={candidate.github} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm font-bold text-[#00408B] hover:text-blue-500 hover:underline transition-colors uppercase border border-slate-200 px-3 py-2 bg-slate-50 hover:bg-white rounded">
+                    <span className="material-symbols-outlined text-[18px]">code</span> GitHub
+                  </a>
+                ) : (
+                  <span className="flex items-center gap-2 text-sm font-bold text-slate-400 uppercase border border-slate-200 px-3 py-2 bg-slate-50 rounded cursor-not-allowed">
+                    <span className="material-symbols-outlined text-[18px]">code_off</span> No GitHub
+                  </span>
                 )}
               </div>
 

@@ -15,6 +15,8 @@ const TopAppBar = ({ isRegistered, user }) => {
     return `block transition-colors py-2 border-l-4 ${location.pathname === path ? 'border-[#00408B] text-[#00408B] font-bold pl-3 bg-slate-50' : 'border-transparent hover:text-[#00408B] pl-3'}`;
   };
 
+  const profileImageSrc = user?.profilePic || `https://ui-avatars.com/api/?name=${user?.name ? user.name.replace(' ', '+') : 'User'}&background=0D8ABC&color=fff`;
+
   return (
     <header className="bg-white dark:bg-slate-950 flex justify-between items-center w-full px-6 py-4 max-w-full docked full-width top-0 border-b border-[#00408B] border-double border-b-[3px] shadow-sm z-50 sticky">
       <div className="flex items-center gap-3 w-auto md:w-1/4">
@@ -54,7 +56,7 @@ const TopAppBar = ({ isRegistered, user }) => {
         {/* Profile Picture (Only show if registered) */}
         {isRegistered && (
           <div className="hidden md:flex w-10 h-10 rounded-full bg-slate-200 items-center justify-center overflow-hidden border border-[#00408B]">
-            <img src={`https://ui-avatars.com/api/?name=${user?.name ? user.name.replace(' ', '+') : 'User'}&background=0D8ABC&color=fff`} alt="Profile" className="w-full h-full object-cover" />
+            <img src={profileImageSrc} alt="Profile" className="w-full h-full object-cover" />
           </div>
         )}
 
@@ -77,7 +79,7 @@ const TopAppBar = ({ isRegistered, user }) => {
             <>
               <div className="flex items-center gap-3 mb-2 border-b border-slate-100 pb-3 px-6">
                 <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden border border-[#00408B]">
-                  <img src={`https://ui-avatars.com/api/?name=${user?.name ? user.name.replace(' ', '+') : 'User'}&background=0D8ABC&color=fff`} alt="Profile" className="w-full h-full object-cover" />
+                  <img src={profileImageSrc} alt="Profile" className="w-full h-full object-cover" />
                 </div>
                 <span>{user?.name || 'User'}</span>
               </div>
