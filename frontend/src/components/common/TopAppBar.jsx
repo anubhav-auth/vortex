@@ -18,11 +18,14 @@ const TopAppBar = () => {
           <Link to="/register" className={`transition-colors ${location.pathname === '/register' ? 'text-[#00408B] border-b-2 border-[#00408B] pb-1' : 'hover:text-[#00408B] pb-1'}`}>
             REGISTRATION
           </Link>
-          <Link to="/leaderboard" className={`transition-colors ${location.pathname === '/leaderboard' ? 'text-[#00408B] border-b-2 border-[#00408B] pb-1' : 'hover:text-[#00408B] pb-1'}`}>
+          <Link to="/manifest" className={`transition-colors ${location.pathname === '/manifest' ? 'text-[#00408B] border-b-2 border-[#00408B] pb-1' : 'hover:text-[#00408B] pb-1'}`}>
             PASSENGER MANIFEST
           </Link>
-          <Link to="/crew" className={`transition-colors ${location.pathname === '/crew' ? 'text-[#00408B] border-b-2 border-[#00408B] pb-1' : 'hover:text-[#00408B] pb-1'}`}>
+          <Link to="/crew/form" className={`transition-colors ${location.pathname.startsWith('/crew') ? 'text-[#00408B] border-b-2 border-[#00408B] pb-1' : 'hover:text-[#00408B] pb-1'}`}>
             FORM A CREW
+          </Link>
+          <Link to="/leaderboard" className={`transition-colors ${location.pathname === '/leaderboard' ? 'text-[#00408B] border-b-2 border-[#00408B] pb-1' : 'hover:text-[#00408B] pb-1'}`}>
+            LEADERBOARD
           </Link>
         </nav>
       </div>

@@ -3,7 +3,9 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import TopAppBar from './components/common/TopAppBar';
 import Footer from './components/common/Footer';
 import RegistrationPage from './pages/Registration/RegistrationPage';
-import CrewDashboard from './pages/CrewDashboard/CrewDashboard';
+import PassengerManifest from './pages/PassengerManifest/PassengerManifest';
+import FormCrew from './pages/CrewDashboard/FormCrew';
+import JoinCrew from './pages/CrewDashboard/JoinCrew';
 import LeaderboardPage from './pages/Leaderboard/LeaderboardPage';
 
 const App = () => {
@@ -18,7 +20,9 @@ const App = () => {
             <Routes>
               <Route path="/" element={<Navigate to="/register" replace />} />
               <Route path="/register" element={<RegistrationPage />} />
-              <Route path="/crew" element={<CrewDashboard />} />
+              <Route path="/manifest" element={<PassengerManifest />} />
+              <Route path="/crew/form" element={<FormCrew />} />
+              <Route path="/crew/join" element={<JoinCrew />} />
               <Route path="/leaderboard" element={<LeaderboardPage />} />
             </Routes>
           </div>

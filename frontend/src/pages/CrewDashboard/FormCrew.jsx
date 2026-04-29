@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import NavigationDrawer from '../../components/common/NavigationDrawer';
 import MachinedCard from '../../components/common/MachinedCard';
 import TrackDivider from '../../components/common/TrackDivider';
@@ -13,13 +14,15 @@ const MOCK_CURRENT_USER = {
 };
 
 const MOCK_CANDIDATES = [
-  { id: 'u2', name: 'Priya Patel', domain: 'AI/ML', gender: 'Female' },
-  { id: 'u3', name: 'Rahul Singh', domain: 'AI/ML', gender: 'Male' },
-  { id: 'u4', name: 'Neha Gupta', domain: 'Web', gender: 'Female' },
-  { id: 'u5', name: 'Vikram Das', domain: 'AI/ML', gender: 'Male' },
+  { id: 'u2', name: 'Priya Patel', domain: 'AI/ML', gender: 'Female', tech: 'Python, TensorFlow' },
+  { id: 'u3', name: 'Rahul Singh', domain: 'AI/ML', gender: 'Male', tech: 'PyTorch, SQL' },
+  { id: 'u4', name: 'Neha Gupta', domain: 'Web', gender: 'Female', tech: 'React, Tailwind' },
+  { id: 'u5', name: 'Vikram Das', domain: 'AI/ML', gender: 'Male', tech: 'OpenCV, C++' },
 ];
 
 const CrewDashboard = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [teamMembers, setTeamMembers] = useState([MOCK_CURRENT_USER]);
   const [problemStatement, setProblemStatement] = useState('');
   const [isLocked, setIsLocked] = useState(false);
@@ -66,6 +69,22 @@ const CrewDashboard = () => {
       
       <main className="flex-1 lg:ml-64 p-8 bg-surface flex justify-center">
         <div className="w-full max-w-7xl">
+          {/* Sub-Navigation Tabs */}
+          <div className="flex border-b border-slate-300 mb-8">
+            <button 
+              onClick={() => navigate('/crew/join')}
+              className={`px-8 py-4 font-bold uppercase tracking-widest text-sm transition-colors border-b-4 ${location.pathname === '/crew/join' ? 'border-[#00408B] text-[#00408B] bg-blue-50' : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-[#00408B]'}`}
+            >
+              Join a Crew
+            </button>
+            <button 
+              onClick={() => navigate('/crew/form')}
+              className={`px-8 py-4 font-bold uppercase tracking-widest text-sm transition-colors border-b-4 ${location.pathname === '/crew/form' || location.pathname === '/crew' ? 'border-[#00408B] text-[#00408B] bg-blue-50' : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-[#00408B]'}`}
+            >
+              Form a Crew
+            </button>
+          </div>
+
           <div className="mb-10">
           <div className="flex items-center gap-3 text-secondary uppercase font-headline-sm font-bold tracking-tighter">
             <span className="material-symbols-outlined">engineering</span>
@@ -160,7 +179,10 @@ const CrewDashboard = () => {
                   {candidates.map(candidate => (
                     <div key={candidate.id} className="bg-white border border-slate-200 p-4 shadow-sm hover:shadow-md transition-shadow">
                       <p className="font-label-md text-primary uppercase mb-1">{candidate.name}</p>
-                      <p className="font-label-sm text-slate-500 mb-4">{candidate.gender}</p>
+                      <div className="flex justify-between items-center mb-4">
+                        <p className="font-label-sm text-slate-500">{candidate.gender}</p>
+                        <p className="font-bold text-[10px] bg-blue-50 text-[#00408B] px-2 py-1 rounded-sm">{candidate.tech}</p>
+                      </div>
                       
                       <button 
                         disabled={isLocked}
