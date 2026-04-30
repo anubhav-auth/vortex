@@ -1,263 +1,245 @@
 import { prisma } from '../config/db.js';
+import { sendMail } from '../utils/mail.js';
 
-// Helper — recompute team counts after any member change
-const recomputeTeamCounts = async (teamId) => {
-  const members = await prisma.teamMember.findMany({
-    where: { teamId },
-    include: { student: true },
-  });
-
-  const team = await prisma.team.findUnique({
-    where: { id: teamId },
-    include: { problemStatement: true },
-  });
-
-  const memberCount         = members.length;
-  const femaleCount         = members.filter(m => m.student.gender === 'Female').length;
-  const domainSpecificCount = members.filter(
-    m => m.student.domainId === team.problemStatement.domainId
-  ).length;
-
-  await prisma.team.update({
-    where: { id: teamId },
-    data: { memberCount, femaleCount, domainSpecificCount },
-  });
-};
-
-export const createTeam = async (req, res, next) => {
+export const getAllTeams = async (req, res, next) => {
   try {
-    const { teamName, psId, leaderId } = req.body;
-
-    // Leader must be Verified
-    const leader = await prisma.student.findUnique({ where: { id: leaderId } });
-    if (!leader) return res.status(404).json({ error: 'Leader not found' });
-    if (leader.verificationStatus !== 'Verified') {
-      return res.status(400).json({ error: 'Leader must be a Verified student' });
+    const { search, psId, status } = req.query;
+    const where = {};
+    if (status) where.teamStatus = status;
+    if (psId) where.psId = psId;
+    if (search) {
+      where.OR = [
+        { teamName: { contains: search } },
+        { leader: { fullName: { contains: search } } }
+      ];
     }
 
-    // Leader can only lead one team
-    const existingTeam = await prisma.team.findUnique({ where: { leaderId } });
-    if (existingTeam) return res.status(400).json({ error: 'Student is already a team leader' });
-
-    // PS must exist
-    const ps = await prisma.problemStatement.findUnique({ where: { id: psId } });
-    if (!ps) return res.status(404).json({ error: 'Problem statement not found' });
-
-    // Create team + add leader as TeamMember in a transaction
-    const team = await prisma.$transaction(async (tx) => {
-      const newTeam = await tx.team.create({
-        data: { teamName, psId, leaderId },
-      });
-
-      await tx.teamMember.create({
-        data: { teamId: newTeam.id, studentId: leaderId, role: 'Leader' },
-      });
-
-      return newTeam;
-    });
-
-    await recomputeTeamCounts(team.id);
-
-    const updated = await prisma.team.findUnique({
-      where: { id: team.id },
+    const teams = await prisma.team.findMany({
+      where,
       include: {
-        members: { include: { student: true } },
-        problemStatement: { include: { domain: true } },
-        leader: true,
-      },
+        problemStatement: true,
+        leader: { include: { institute: true } },
+        members: { include: { student: { include: { institute: true } } } }
+      }
     });
-
-    res.status(201).json({ message: 'Team created successfully', team: updated });
+    res.json(teams);
   } catch (err) {
     next(err);
   }
 };
 
+// Get compatible teams for an individual (same PS)
+export const getCompatibleTeams = async (req, res, next) => {
+  try {
+    const { psId } = req.query;
+    const teams = await prisma.team.findMany({
+      where: { 
+        psId,
+        teamStatus: 'FORMING'
+      },
+      include: {
+        members: { include: { student: true } },
+        problemStatement: true,
+        leader: true
+      }
+    });
 
+    const enrichedTeams = teams.map(t => {
+      const pendingFemale = t.femaleCount < 1; // Assuming at least 1 female required
+      const pendingDomainExperts = Math.max(0, t.problemStatement.minDomainMembers - t.domainSpecificCount);
+      
+      return {
+        ...t,
+        requirements: {
+          pendingFemale,
+          pendingDomainExperts,
+          summary: `${pendingFemale ? 'Female member pending. ' : ''}${pendingDomainExperts > 0 ? `${pendingDomainExperts} domain experts needed.` : ''}`
+        }
+      };
+    });
 
-export const addMember = async (req, res, next) => {
-    try {
-      const { id: teamId } = req.params;
-      const { studentId } = req.body;
-  
-      const team = await prisma.team.findUnique({ where: { id: teamId } });
-      if (!team) return res.status(404).json({ error: 'Team not found' });
-      if (team.teamStatus === 'Confirmed') {
-        return res.status(400).json({ error: 'Cannot modify a confirmed team' });
-      }
-  
-      const student = await prisma.student.findUnique({ where: { id: studentId } });
-      if (!student) return res.status(404).json({ error: 'Student not found' });
-      if (student.verificationStatus !== 'Verified') {
-        return res.status(400).json({ error: 'Student must be Verified to join a team' });
-      }
-  
-      // Check duplicate
-      const existing = await prisma.teamMember.findUnique({
-        where: { teamId_studentId: { teamId, studentId } },
-      });
-      if (existing) return res.status(400).json({ error: 'Student is already in this team' });
-  
-      await prisma.teamMember.create({
-        data: { teamId, studentId, role: 'Member' },
-      });
-  
-      await recomputeTeamCounts(teamId);
-  
-      const updated = await prisma.team.findUnique({
-        where: { id: teamId },
-        include: { members: { include: { student: true } } },
-      });
-  
-      res.json({ message: 'Member added successfully', team: updated });
-    } catch (err) {
-      next(err);
-    }
-  };
-  
-  export const removeMember = async (req, res, next) => {
-    try {
-      const { id: teamId, studentId } = req.params;
-  
-      const team = await prisma.team.findUnique({ where: { id: teamId } });
-      if (!team) return res.status(404).json({ error: 'Team not found' });
-      if (team.teamStatus === 'Confirmed') {
-        return res.status(400).json({ error: 'Cannot modify a confirmed team' });
-      }
-  
-      // Cannot remove the leader
-      if (team.leaderId === studentId) {
-        return res.status(400).json({ error: 'Cannot remove the team leader' });
-      }
-  
-      const member = await prisma.teamMember.findUnique({
-        where: { teamId_studentId: { teamId, studentId } },
-      });
-      if (!member) return res.status(404).json({ error: 'Member not found in this team' });
-  
-      await prisma.teamMember.delete({
-        where: { teamId_studentId: { teamId, studentId } },
-      });
-  
-      await recomputeTeamCounts(teamId);
-  
-      const updated = await prisma.team.findUnique({
-        where: { id: teamId },
-        include: { members: { include: { student: true } } },
-      });
-  
-      res.json({ message: 'Member removed successfully', team: updated });
-    } catch (err) {
-      next(err);
-    }
-  };
-  
-  export const getTeam = async (req, res, next) => {
-    try {
-      const team = await prisma.team.findUnique({
-        where: { id: req.params.id },
-        include: {
-          members: { include: { student: true } },
-          problemStatement: { include: { domain: true } },
-          leader: true,
-        },
-      });
-      if (!team) return res.status(404).json({ error: 'Team not found' });
-      res.json(team);
-    } catch (err) {
-      next(err);
-    }
-  };
+    res.json({ count: enrichedTeams.length, teams: enrichedTeams });
+  } catch (err) {
+    next(err);
+  }
+};
 
+export const createSquad = async (req, res, next) => {
+  try {
+    const { teamName, psId, leaderId } = req.body;
 
-  export const validateTeam = async (req, res, next) => {
-    try {
-      const team = await prisma.team.findUnique({
-        where: { id: req.params.id },
-        include: {
-          members: { include: { student: true } },
-          problemStatement: true,
-        },
+    const existing = await prisma.team.findUnique({ where: { teamName } });
+    if (existing) return res.status(400).json({ error: 'DESIGNATION_ALREADY_IN_USE' });
+
+    const ps = await prisma.problemStatement.findUnique({ where: { id: psId } });
+    const leader = await prisma.student.findUnique({ where: { id: leaderId } });
+
+    const isFemale = leader.gender?.toLowerCase() === 'female';
+    const isDomainExpert = leader.domainId === ps.domainId;
+
+    const team = await prisma.$transaction(async (tx) => {
+      const newTeam = await tx.team.create({
+        data: { 
+          teamName, 
+          psId, 
+          leaderId, 
+          teamStatus: 'FORMING',
+          memberCount: 1,
+          femaleCount: isFemale ? 1 : 0,
+          domainSpecificCount: isDomainExpert ? 1 : 0
+        }
       });
-      if (!team) return res.status(404).json({ error: 'Team not found' });
-  
-      const memberCount         = team.members.length;
-      const femaleCount         = team.members.filter(m => m.student.gender === 'Female').length;
-      const psDomainId          = team.problemStatement.domainId;
-      const minDomainMembers    = team.problemStatement.minDomainMembers;
-      const domainSpecificCount = team.members.filter(
-        m => m.student.domainId === psDomainId
-      ).length;
-  
-      const errors = [];
-      if (memberCount < 4 || memberCount > 5) {
-        errors.push(`Team must have 4-5 members (currently ${memberCount})`);
-      }
-      if (femaleCount < 1) {
-        errors.push('Team must have at least 1 female member');
-      }
-      if (domainSpecificCount < minDomainMembers) {
-        errors.push(`Team must have at least ${minDomainMembers} members from PS domain (currently ${domainSpecificCount})`);
-      }
-  
-      res.json({
-        valid: errors.length === 0,
-        memberCount,
-        femaleCount,
-        domainSpecificCount,
-        minDomainMembers,
-        errors,
+
+      await tx.teamMember.create({
+        data: { teamId: newTeam.id, studentId: leaderId, role: 'Leader' }
       });
-    } catch (err) {
-      next(err);
-    }
-  };
-  
-  export const confirmTeam = async (req, res, next) => {
-    try {
-      const { id: teamId } = req.params;
-  
-      const team = await prisma.team.findUnique({
-        where: { id: teamId },
-        include: {
-          members: { include: { student: true } },
-          problemStatement: true,
-        },
+
+      // Update student role to TEAMLEAD
+      await tx.student.update({
+        where: { id: leaderId },
+        data: { role: 'TEAMLEAD' }
       });
-      if (!team) return res.status(404).json({ error: 'Team not found' });
-      if (team.teamStatus === 'Confirmed') {
-        return res.status(400).json({ error: 'Team is already confirmed' });
+
+      return newTeam;
+    });
+
+    res.status(201).json({ message: 'SQUAD_INITIALIZED', team });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const sendJoinRequest = async (req, res, next) => {
+  try {
+    const { teamId, studentId } = req.body;
+    
+    // Check if user already in a team
+    const inTeam = await prisma.teamMember.findFirst({ where: { studentId } });
+    if (inTeam) return res.status(400).json({ error: 'ALREADY_ASSIGNED_TO_SQUAD' });
+
+    const team = await prisma.team.findUnique({ 
+      where: { id: teamId },
+      include: { leader: true }
+    });
+
+    const request = await prisma.joinRequest.create({
+      data: { teamId, studentId },
+      include: { student: true }
+    });
+
+    await sendMail({
+      to: team.leader.email,
+      subject: '[VORTEX] SQUAD_ENLISTMENT_REQUEST',
+      text: `Operative ${request.student.fullName} has requested to join your squad.\n\nSUMMARY: ${request.student.summary}\nEMAIL: ${request.student.email}`
+    });
+
+    res.json({ message: 'ENLISTMENT_REQUEST_TRANSMITTED' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const handleJoinRequest = async (req, res, next) => {
+  try {
+    const { requestId, action } = req.body; // ACCEPTED or REJECTED
+
+    const request = await prisma.joinRequest.findUnique({
+      where: { id: requestId },
+      include: { 
+        team: { include: { problemStatement: true } }, 
+        student: true 
       }
-  
-      // Run same validation logic inline
-      const memberCount         = team.members.length;
-      const femaleCount         = team.members.filter(m => m.student.gender === 'Female').length;
-      const psDomainId          = team.problemStatement.domainId;
-      const minDomainMembers    = team.problemStatement.minDomainMembers;
-      const domainSpecificCount = team.members.filter(
-        m => m.student.domainId === psDomainId
-      ).length;
-  
-      const errors = [];
-      if (memberCount < 4 || memberCount > 5) errors.push(`Team must have 4-5 members (currently ${memberCount})`);
-      if (femaleCount < 1) errors.push('Team must have at least 1 female member');
-      if (domainSpecificCount < minDomainMembers) errors.push(`Need at least ${minDomainMembers} members from PS domain`);
-  
-      if (errors.length > 0) {
-        await prisma.team.update({
-          where: { id: teamId },
-          data: { teamStatus: 'Disqualified' },
+    });
+
+    if (!request) return res.status(404).json({ error: 'REQUEST_NOT_FOUND' });
+
+    if (action === 'ACCEPTED') {
+      const isFemale = request.student.gender?.toLowerCase() === 'female';
+      const isDomainExpert = request.student.domainId === request.team.problemStatement.domainId;
+
+      await prisma.$transaction(async (tx) => {
+        await tx.teamMember.create({
+          data: { 
+            teamId: request.teamId, 
+            studentId: request.studentId, 
+            role: 'Member' 
+          }
         });
-        return res.status(400).json({ error: 'Team is invalid and has been disqualified', errors });
-      }
-  
-      const confirmed = await prisma.team.update({
-        where: { id: teamId },
-        data: { teamStatus: 'Confirmed' },
+
+        await tx.team.update({
+          where: { id: request.teamId },
+          data: {
+            memberCount: { increment: 1 },
+            femaleCount: { increment: isFemale ? 1 : 0 },
+            domainSpecificCount: { increment: isDomainExpert ? 1 : 0 }
+          }
+        });
+
+        await tx.joinRequest.update({
+          where: { id: requestId },
+          data: { status: 'ACCEPTED' }
+        });
+
+        // Cancel other requests for this student
+        await tx.joinRequest.updateMany({
+          where: { studentId: request.studentId, status: 'PENDING' },
+          data: { status: 'REJECTED' }
+        });
       });
-  
-      res.json({ message: 'Team confirmed successfully', team: confirmed });
-    } catch (err) {
-      next(err);
+
+      await sendMail({
+        to: request.student.email,
+        subject: '[VORTEX] SQUAD_ENLISTMENT_CONFIRMED',
+        text: `Your request to join ${request.team.teamName} has been ACCEPTED. Squad up at the dashboard.`
+      });
+    } else {
+      await prisma.joinRequest.update({
+        where: { id: requestId },
+        data: { status: 'REJECTED' }
+      });
     }
-  };
+
+    res.json({ message: `REQUEST_PROCESSED: ${action}` });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getTeamRequests = async (req, res, next) => {
+  try {
+    const { teamId } = req.params;
+    const requests = await prisma.joinRequest.findMany({
+      where: { teamId, status: 'PENDING' },
+      include: { student: true }
+    });
+    res.json(requests);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getTeamDetails = async (req, res, next) => {
+  try {
+    const { identifier } = req.params; // ID or Team Name
+    const team = await prisma.team.findFirst({
+      where: {
+        OR: [
+          { id: identifier },
+          { teamName: identifier }
+        ]
+      },
+      include: {
+        problemStatement: { include: { domain: true } },
+        members: { include: { student: { include: { institute: true, domain: true } } } },
+        leader: true,
+        evaluations: true
+      }
+    });
+
+    if (!team) return res.status(404).json({ error: 'SQUAD_NOT_FOUND' });
+
+    res.json(team);
+  } catch (err) {
+    next(err);
+  }
+};
