@@ -1,0 +1,92 @@
+.topappbar {
+  background: #000;
+  border-bottom: 2px solid #111;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+
+.topappbar-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 60px;
+  padding: 0 20px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-text {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 6px;
+  color: var(--accent-cyan);
+  text-transform: uppercase;
+}
+
+.logo-glow {
+  width: 12px;
+  height: 12px;
+  background: var(--status-live);
+  border-radius: 2px;
+  box-shadow: 0 0 10px var(--status-live);
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  50% { opacity: 0.2; }
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nav-link {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  border-radius: 1px;
+  transition: all 0.1s;
+}
+
+.nav-link:hover, .nav-link.active {
+  color: var(--accent-cyan);
+  background: rgba(0, 245, 255, 0.05);
+}
+
+.admin-link {
+  color: var(--status-warn);
+}
+
+.logout-btn {
+  background: transparent;
+  border: 1px solid var(--text-dim);
+  color: var(--text-secondary);
+  padding: 6px 14px;
+  border-radius: 1px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  transition: all 0.1s;
+  margin-left: 12px;
+}
+
+.logout-btn:hover {
+  background: var(--status-crit);
+  border-color: var(--status-crit);
+  color: #000;
+  box-shadow: 0 0 10px rgba(255, 0, 255, 0.4);
+}
