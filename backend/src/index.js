@@ -5,9 +5,14 @@ import cors from 'cors';
 import helmet from 'helmet';
 
 import domainRoutes from './routes/domains.js';
+import instituteRoutes from './routes/institutes.js';
 import awardRoutes from './routes/awards.js';  
 import studentRoutes from './routes/students.js';
 import teamRoutes from './routes/teams.js'; 
+import psRoutes from './routes/ps.js';
+import evaluationsRoutes from './routes/evaluations.js';
+import leaderboardRoutes from './routes/leaderboard.js';
+import adminRoutes from './routes/admin.js';
 const app = express();
 
 app.use(cors());
@@ -17,9 +22,14 @@ app.use(helmet());
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 app.use('/api/domains', domainRoutes);
+app.use('/api/institutes', instituteRoutes);
 app.use('/api/awards', awardRoutes); 
 app.use('/api', studentRoutes);   
-app.use('/api/teams', teamRoutes);            
+app.use('/api/teams', teamRoutes);
+app.use('/api/problem-statements', psRoutes);
+app.use('/api/evaluations', evaluationsRoutes);
+app.use('/api/leaderboard', leaderboardRoutes);            
+app.use('/api/admin', adminRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Route not found' });
