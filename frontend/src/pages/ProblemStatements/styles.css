@@ -1,0 +1,67 @@
+.ps-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+.create-ps-card {
+  margin-bottom: 40px;
+}
+
+.create-form {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.ps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 24px;
+}
+
+.ps-card {
+  border-left: 2px solid var(--accent-cyan);
+}
+
+.ps-card h3 {
+  font-size: 18px;
+  margin-bottom: 12px;
+  color: var(--text-primary);
+}
+
+.ps-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.ps-meta span strong {
+  color: var(--accent-cyan);
+}
+
+.ps-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-delete {
+  background: transparent;
+  border: 1px solid #333;
+  color: var(--text-dim);
+  padding: 4px 10px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.btn-delete:hover {
+  border-color: var(--status-crit);
+  color: var(--status-crit);
+  background: rgba(255, 0, 255, 0.05);
+}
