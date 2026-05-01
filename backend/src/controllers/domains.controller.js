@@ -27,9 +27,9 @@ export const getDomainById = async (req, res, next) => {
 
 export const createDomain = async (req, res, next) => {
   try {
-    const { name, minMembersDefault } = req.body;
+    const { name } = req.body;
     const domain = await prisma.domain.create({
-      data: { name, minMembersDefault: minMembersDefault || 2 }
+      data: { name }
     });
     res.status(201).json(domain);
   } catch (err) {
