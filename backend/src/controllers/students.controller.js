@@ -3,22 +3,28 @@ import { sendMail, generateOTP, generateRandomPassword } from '../utils/mail.js'
 
 export const registerStudent = async (req, res, next) => {
   try {
-    const { fullName, email, gender, institutionId, domainId, psId, summary } = req.body;
+    const { fullName, rollNumber, email, phone, gender, institutionId, domainId, psId, summary, photo } = req.body;
 
     const existing = await prisma.student.findUnique({ where: { email } });
     if (existing) return res.status(400).json({ error: 'EMAIL_ALREADY_LINKED' });
+
+    const existingRoll = await prisma.student.findUnique({ where: { rollNumber: rollNumber || 'N/A' } });
+    if (existingRoll && rollNumber) return res.status(400).json({ error: 'ROLL_NUMBER_ALREADY_LINKED' });
 
     const otp = generateOTP();
 
     const student = await prisma.student.create({
       data: { 
         fullName, 
+        rollNumber,
         email, 
+        phone,
         gender, 
         instituteId: institutionId, 
         domainId, 
         psId, 
         summary,
+        photo,
         otp,
         verificationStatus: 'PENDING',
         role: 'STUDENT'
@@ -45,8 +51,8 @@ export const verifyOTP = async (req, res, next) => {
     const { studentId, otp } = req.body;
     const student = await prisma.student.findUnique({ where: { id: studentId } });
 
-    if (!student) return res.status(404).json({ error: 'OPERATIVE_NOT_FOUND' });
-    if (student.otp !== otp) return res.status(400).json({ error: 'INVALID_OTP_SIGNAL' });
+    if (!student) return res.status(404).json({ error: 'PARTICIPANT_NOT_FOUND' });
+    if (student.otp !== otp) return res.status(400).json({ error: 'INVALID_OTP' });
 
     await prisma.student.update({
       where: { id: studentId },
@@ -56,10 +62,10 @@ export const verifyOTP = async (req, res, next) => {
     await sendMail({
       to: student.email,
       subject: '[VORTEX] REGISTRATION_PENDING_REVIEW',
-      text: `Tactical registration received. Admin review in progress. You will be notified shortly.`
+      text: `Registration received. Admin review in progress. You will be notified shortly.`
     });
 
-    res.json({ message: 'OTP_VERIFIED: AWAITING_ADMIN_CLEARANCE' });
+    res.json({ message: 'OTP_VERIFIED: AWAITING_ADMIN_VERIFICATION' });
   } catch (err) {
     next(err);
   }
@@ -71,7 +77,7 @@ export const adminVerifyStudent = async (req, res, next) => {
     const { status } = req.body; // VERIFIED or REJECTED
 
     const student = await prisma.student.findUnique({ where: { id } });
-    if (!student) return res.status(404).json({ error: 'OPERATIVE_NOT_FOUND' });
+    if (!student) return res.status(404).json({ error: 'PARTICIPANT_NOT_FOUND' });
 
     if (status === 'VERIFIED') {
       const password = generateRandomPassword();
@@ -108,15 +114,16 @@ export const adminVerifyStudent = async (req, res, next) => {
 
 export const getAllOperatives = async (req, res, next) => {
   try {
-    const { status, instituteId, domainId, search } = req.query;
+    const { status, instituteId, domainId, psId, search } = req.query;
     const where = {};
     if (status) where.verificationStatus = status;
     if (instituteId) where.instituteId = instituteId;
     if (domainId) where.domainId = domainId;
+    if (psId) where.psId = psId;
     if (search) {
       where.OR = [
-        { fullName: { contains: search } },
-        { email: { contains: search } }
+        { fullName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } }
       ];
     }
 
@@ -131,6 +138,24 @@ export const getAllOperatives = async (req, res, next) => {
     });
 
     res.json({ count: students.length, operatives: students });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getStudentById = async (req, res, next) => {
+  try {
+    const student = await prisma.student.findUnique({
+      where: { id: req.params.id },
+      include: {
+        institute: true,
+        domain: true,
+        problemStatement: true
+      }
+    });
+
+    if (!student) return res.status(404).json({ error: 'PARTICIPANT_NOT_FOUND' });
+    res.json(student);
   } catch (err) {
     next(err);
   }
