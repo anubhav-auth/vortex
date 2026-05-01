@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { z } from 'zod';
 
 const schema = z.object({
-  DATABASE_URL: z.string().min(1).default('file:./prisma/dev.db'),
+  DATABASE_URL: z.string().min(1),
   ACCESS_TOKEN_SECRET: z.string().min(1),
   REFRESH_TOKEN_SECRET: z.string().min(1),
   ACCESS_TOKEN_EXPIRY: z.string().default('15m'),
