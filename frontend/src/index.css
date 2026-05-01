@@ -1,29 +1,29 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap');
 
-/* Dark Terminal-Core Theme */
+/* Softened Professional Theme */
 :root {
-  --bg-void: #020202;
-  --bg-surface: #0a0a0a;
-  --accent-cyan: #00f5ff;
-  --status-live: #39ff14;
-  --status-warn: #ffcc00;
-  --status-crit: #ff00ff;
+  --bg-void: #0f172a;
+  --bg-surface: #1e293b;
+  --accent-cyan: #38bdf8;
+  --status-live: #4ade80;
+  --status-warn: #fbbf24;
+  --status-crit: #f87171;
   
-  --text-primary: #e0e0e0;
-  --text-secondary: #888888;
-  --text-dim: #444444;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-dim: #64748b;
   
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   
-  --border-dim: 1px solid #1a1a1a;
+  --border-dim: 1px solid #334155;
   --border-active: 1px solid var(--accent-cyan);
   --border-live: 1px solid var(--status-live);
   
-  --glow-cyan: 0 0 10px rgba(0, 245, 255, 0.2);
-  --glow-green: 0 0 10px rgba(57, 255, 20, 0.2);
+  --glow-cyan: 0 4px 12px rgba(56, 189, 248, 0.15);
+  --glow-green: 0 4px 12px rgba(74, 222, 128, 0.15);
   
-  --radius-sharp: 1px;
+  --radius-sharp: 4px;
 }
 
 * {
@@ -39,21 +39,14 @@ body {
   font-family: var(--font-mono);
   min-height: 100vh;
   overflow-x: hidden;
-  
-  /* Subtle scanline/grid texture */
-  background-image: 
-    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
-    linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03)),
-    linear-gradient(rgba(20, 20, 20, 1) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(20, 20, 20, 1) 1px, transparent 1px);
-  background-size: 100% 2px, 3px 100%, 40px 40px, 40px 40px;
+  line-height: 1.5;
 }
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-sans);
-  font-weight: 800;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.025em;
 }
 
 /* Core Components Overhaul */
@@ -64,31 +57,32 @@ h1, h2, h3, h4, h5, h6 {
   border-radius: var(--radius-sharp);
   padding: 24px;
   position: relative;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s ease;
 }
 
 .glass-card:hover {
-  border-color: var(--accent-cyan);
-  box-shadow: var(--glow-cyan);
+  border-color: #475569;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
 }
 
 /* Data heavy terminal inputs */
 .input-glass, .select-glass {
-  background: #000;
+  background: #0f172a;
   border: var(--border-dim);
   border-radius: var(--radius-sharp);
   padding: 12px 16px;
-  color: var(--accent-cyan);
+  color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: 14px;
   width: 100%;
-  transition: all 0.1s;
+  transition: all 0.2s;
 }
 
 .input-glass:focus, .select-glass:focus {
   outline: none;
   border-color: var(--accent-cyan);
-  box-shadow: var(--glow-cyan);
+  ring: 2px solid var(--accent-cyan);
 }
 
 .input-glass::placeholder {
@@ -97,15 +91,15 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Sharp action buttons */
 .glow-button {
-  background: transparent;
-  color: var(--accent-cyan);
-  border: 1px solid var(--accent-cyan);
+  background: var(--accent-cyan);
+  color: #0f172a;
+  border: none;
   border-radius: var(--radius-sharp);
   padding: 12px 24px;
   font-family: var(--font-mono);
-  font-weight: bold;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.05em;
   cursor: pointer;
   transition: all 0.2s;
   position: relative;
@@ -113,20 +107,26 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .glow-button:hover {
-  background: var(--accent-cyan);
-  color: #000;
-  box-shadow: 0 0 15px rgba(0, 245, 255, 0.4);
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.glow-button:disabled {
+  background: var(--bg-surface);
+  color: var(--text-dim);
+  cursor: not-allowed;
 }
 
 .gradient-text {
-  color: var(--accent-cyan);
-  text-shadow: 0 0 8px rgba(0, 245, 255, 0.3);
+  background: linear-gradient(to right, var(--accent-cyan), var(--status-live));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -134,9 +134,10 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #222;
+  background: #334155;
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-cyan);
+  background: #475569;
 }

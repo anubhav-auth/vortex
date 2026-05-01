@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Trophy } from 'lucide-react';
 import './styles.css';
 
 function Leaderboard({ apiUrl }) {
@@ -36,9 +37,18 @@ function Leaderboard({ apiUrl }) {
               leaderboard.map(entry => (
                 <tr key={entry.teamId} className={entry.rankPosition <= 3 ? 'top-ranked' : ''}>
                   <td className="rank-cell">
-                    {entry.rankPosition <= 3 && <span className="medal">
-                      {entry.rankPosition === 1 ? '🥇' : entry.rankPosition === 2 ? '🥈' : '🥉'}
-                    </span>}
+                    {entry.rankPosition <= 3 && (
+                      <span className="medal">
+                        <Trophy 
+                          size={18} 
+                          color={
+                            entry.rankPosition === 1 ? '#FFD700' : 
+                            entry.rankPosition === 2 ? '#C0C0C0' : 
+                            '#CD7F32'
+                          } 
+                        />
+                      </span>
+                    )}
                     <span className="rank-num">#{entry.rankPosition}</span>
                   </td>
                   <td className="team-name">{entry.team?.teamName}</td>

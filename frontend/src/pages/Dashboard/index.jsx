@@ -6,28 +6,28 @@ function Dashboard({ user, apiUrl }) {
   return (
     <div className="dashboard-page">
       <div className="dashboard-header">
-        <h1><ScrambleText text={`ACCESS_GRANTED: ${user?.fullName || user?.name}`} className="text-[var(--status-live)] font-mono" /></h1>
-        <p>SYSTEM_ORIGIN: {user?.institution || 'UNKNOWN_STATION'}</p>
+        <h1><ScrambleText text={`Welcome, ${user?.fullName}`} className="text-[var(--status-live)] font-sans" /></h1>
+        <p>Institution: {user?.institute?.name || 'Unknown Station'}</p>
       </div>
 
       <div className="dashboard-grid">
         <NeonBorderCard>
         <div className="glass-card profile-card h-full">
           <div className="card-header">
-            <h2>USER_PROFILE</h2>
+            <h2>User Profile</h2>
           </div>
           <div className="profile-info">
             <div className="info-item">
-              <span className="info-label">IDENTIFIER</span>
-              <span className="info-value">{user?.rollNumber || 'N/A'}</span>
+              <span className="info-label">Roll Number</span>
+              <span className="info-value">{user?.rollNumber || 'Not Found'}</span>
             </div>
             <div className="info-item">
-              <span className="info-label">COMMS_CHANNEL</span>
+              <span className="info-label">Email Address</span>
               <span className="info-value">{user?.email}</span>
             </div>
             <div className="info-item">
-              <span className="info-label">PRIMARY_DOMAIN</span>
-              <span className="info-value">{user?.domain || 'UNASSIGNED'}</span>
+              <span className="info-label">Tech Stack</span>
+              <span className="info-value">{user?.domain?.name || 'Unassigned'}</span>
             </div>
           </div>
         </div>
@@ -36,49 +36,49 @@ function Dashboard({ user, apiUrl }) {
         <NeonBorderCard>
         <div className="glass-card status-card h-full">
           <div className="card-header">
-            <h2>CLEARANCE_STATUS</h2>
+            <h2>Registration Status</h2>
           </div>
           <div className="status-display">
-            <div className={`status-indicator ${user?.role === 'admin' ? 'verified' : user?.role === 'teamlead' ? 'verified' : 'pending'}`}>
-              {user?.role === 'admin' ? 'SYSTEM_ADMIN' : user?.role === 'teamlead' ? 'SQUAD_COMMANDER' : 'PENDING_AUTH'}
+            <div className={`status-indicator ${user?.role === 'ADMIN' ? 'verified' : user?.role === 'TEAMLEAD' ? 'verified' : 'pending'}`}>
+              {user?.role === 'ADMIN' ? 'Administrator' : user?.role === 'TEAMLEAD' ? 'Team Leader' : 'Pending Verification'}
             </div>
             <p className="status-message">
-              {user?.role === 'admin' 
-                ? 'Full system access protocols active.' 
-                : user?.role === 'teamlead'
-                ? 'Squad command protocols initialized. Operative leading mission.'
-                : 'Awaiting administrator verification for deployment.'}
+              {user?.role === 'ADMIN' 
+                ? 'Full administrative access granted.' 
+                : user?.role === 'TEAMLEAD'
+                ? 'Team leadership active. Leading the project challenge.'
+                : 'Awaiting administrator verification for full participation.'}
             </p>
           </div>
         </div>
         </NeonBorderCard>
 
-        {(user?.role === 'student' || user?.role === 'teamlead') && (
+        {(user?.role === 'STUDENT' || user?.role === 'TEAMLEAD') && (
           <NeonBorderCard>
           <div className="glass-card team-preview-card h-full">
             <div className="card-header">
-              <h2>TEAM_OPERATIONS</h2>
+              <h2>Team Management</h2>
             </div>
             <div className="no-team">
-              <p>{user?.role === 'teamlead' ? 'SQUAD_ACTIVE' : 'NO_ACTIVE_SQUAD_DETECTED'}</p>
+              <p>{user?.role === 'TEAMLEAD' ? 'Team Active' : 'No Team Found'}</p>
               <a href="/teams" className="glow-button">
-                {user?.role === 'teamlead' ? 'MANAGE_SQUAD' : 'INITIALIZE_FORMATION'}
+                {user?.role === 'TEAMLEAD' ? 'Manage Team' : 'Create Team'}
               </a>
             </div>
           </div>
           </NeonBorderCard>
         )}
 
-        {user?.role === 'admin' && (
+        {user?.role === 'ADMIN' && (
           <NeonBorderCard>
           <div className="glass-card admin-ops-card h-full">
             <div className="card-header">
-              <h2>COMMAND_CENTER</h2>
+              <h2>Admin Dashboard</h2>
             </div>
             <div className="admin-actions" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <a href="/admin" className="action-link"> {'>'} MANAGE_OPERATIVES</a>
-              <a href="/problem-statements" className="action-link"> {'>'} SECTOR_OBJECTIVES</a>
-              <a href="/leaderboard" className="action-link"> {'>'} GLOBAL_RANKINGS</a>
+              <a href="/admin" className="action-link"> {'>'} Manage Participants</a>
+              <a href="/problem-statements" className="action-link"> {'>'} Challenges</a>
+              <a href="/leaderboard" className="action-link"> {'>'} Leaderboard</a>
             </div>
           </div>
           </NeonBorderCard>
