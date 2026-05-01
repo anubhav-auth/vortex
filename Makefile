@@ -52,6 +52,7 @@ launch: build
 	@sleep 5
 	@echo "--- SYNCHRONIZING_DATABASE_SCHEMA ---"
 	$(DOCKER_COMPOSE) exec $(BACKEND_SERVICE) npx prisma db push --accept-data-loss
+	$(DOCKER_COMPOSE) exec $(BACKEND_SERVICE) npx prisma generate
 	@echo "--- INJECTING_MISSION_CRITICAL_DATA ---"
 	$(DOCKER_COMPOSE) exec $(BACKEND_SERVICE) npm run db:seed
 	@echo "--- ACTIVATING_FRONTEND_INTERFACE ---"
