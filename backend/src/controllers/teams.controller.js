@@ -9,8 +9,8 @@ export const getAllTeams = async (req, res, next) => {
     if (psId) where.psId = psId;
     if (search) {
       where.OR = [
-        { teamName: { contains: search } },
-        { leader: { fullName: { contains: search } } }
+        { teamName: { contains: search, mode: 'insensitive' } },
+        { leader: { fullName: { contains: search, mode: 'insensitive' } } }
       ];
     }
 
@@ -18,8 +18,14 @@ export const getAllTeams = async (req, res, next) => {
       where,
       include: {
         problemStatement: true,
-        leader: { include: { institute: true } },
-        members: { include: { student: { include: { institute: true } } } }
+        leader: { include: { institute: true, domain: true } },
+        members: { 
+          include: { 
+            student: { 
+              include: { institute: true, domain: true, problemStatement: true } 
+            } 
+          } 
+        }
       }
     });
     res.json(teams);
@@ -32,28 +38,35 @@ export const getAllTeams = async (req, res, next) => {
 export const getCompatibleTeams = async (req, res, next) => {
   try {
     const { psId } = req.query;
-    const teams = await prisma.team.findMany({
-      where: { 
-        psId,
-        teamStatus: 'FORMING'
-      },
-      include: {
-        members: { include: { student: true } },
-        problemStatement: true,
-        leader: true
-      }
-    });
+    const [teams, config] = await Promise.all([
+      prisma.team.findMany({
+        where: { 
+          psId,
+          teamStatus: 'FORMING'
+        },
+        include: {
+          members: { include: { student: true } },
+          problemStatement: true,
+          leader: true
+        }
+      }),
+      prisma.globalConfig.findUnique({ where: { id: 'vortex_config' } })
+    ]);
+
+    const rules = config || { minTeamMembers: 2, maxTeamMembers: 5, minFemaleMembers: 1, minDomainExperts: 1 };
 
     const enrichedTeams = teams.map(t => {
-      const pendingFemale = t.femaleCount < 1; // Assuming at least 1 female required
-      const pendingDomainExperts = Math.max(0, t.problemStatement.minDomainMembers - t.domainSpecificCount);
+      const pendingFemale = t.femaleCount < rules.minFemaleMembers;
+      const pendingDomainExperts = Math.max(0, rules.minDomainExperts - t.domainSpecificCount);
+      const pendingMembers = Math.max(0, rules.minTeamMembers - t.memberCount);
       
       return {
         ...t,
         requirements: {
           pendingFemale,
           pendingDomainExperts,
-          summary: `${pendingFemale ? 'Female member pending. ' : ''}${pendingDomainExperts > 0 ? `${pendingDomainExperts} domain experts needed.` : ''}`
+          pendingMembers,
+          summary: `${pendingFemale ? 'Female member pending. ' : ''}${pendingDomainExperts > 0 ? `${pendingDomainExperts} domain experts needed. ` : ''}${pendingMembers > 0 ? `${pendingMembers} more members needed.` : ''}`
         }
       };
     });
@@ -67,6 +80,9 @@ export const getCompatibleTeams = async (req, res, next) => {
 export const createSquad = async (req, res, next) => {
   try {
     const { teamName, psId, leaderId } = req.body;
+
+    const existingInTeam = await prisma.teamMember.findFirst({ where: { studentId: leaderId } });
+    if (existingInTeam) return res.status(400).json({ error: 'ALREADY_ASSIGNED_TO_SQUAD' });
 
     const existing = await prisma.team.findUnique({ where: { teamName } });
     if (existing) return res.status(400).json({ error: 'DESIGNATION_ALREADY_IN_USE' });
