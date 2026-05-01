@@ -1,28 +1,33 @@
+import { Link } from 'react-router-dom';
+import { Wind } from 'lucide-react';
 import './styles.css';
 
 function TopAppBar({ isRegistered, user, onLogout }) {
   return (
     <header className="topappbar">
       <div className="topappbar-content">
-        <a href="/" className="logo">
-          <div className="logo-glow"></div>
-          <span className="logo-text">VORTEX</span>
-        </a>
-        {isRegistered && (
-          <nav className="nav-links">
-            <a href="/dashboard" className="nav-link">Dashboard</a>
-            <a href="/teams" className="nav-link">Teams</a>
-            <a href="/leaderboard" className="nav-link">Leaderboard</a>
-            <a href="/awards" className="nav-link">Awards</a>
-            {user?.role === 'admin' && (
-              <a href="/admin" className="nav-link admin-link">Admin</a>
-            )}
-            {user?.role === 'admin' && (
-              <a href="/problem-statements" className="nav-link admin-link">PS</a>
-            )}
-            <button onClick={onLogout} className="logout-btn">Logout</button>
-          </nav>
-        )}
+        <Link to="/" className="logo">
+          <Wind size={24} color="var(--accent-cyan)" strokeWidth={2.5} />
+        </Link>
+        <nav className="nav-links">
+          <Link to="/leaderboard" className="nav-link">Leaderboard</Link>
+          <Link to="/problem-statements" className="nav-link">Problem Statements</Link>
+          {isRegistered ? (
+            <>
+              <Link to="/dashboard" className="nav-link">Dashboard</Link>
+              {user?.role !== 'ADMIN' && (
+                <Link to="/teams" className="nav-link">Teams</Link>
+              )}
+              <Link to="/awards" className="nav-link">Awards</Link>
+              {user?.role === 'ADMIN' && (
+                <Link to="/admin" className="nav-link admin-link">Admin</Link>
+              )}
+              <button onClick={onLogout} className="logout-btn">Logout</button>
+            </>
+          ) : (
+            <Link to="/register" className="nav-link register-btn">Register</Link>
+          )}
+        </nav>
       </div>
     </header>
   );
