@@ -23,6 +23,8 @@ services:
     restart: always
     environment:
       DATABASE_URL: postgresql://vortex_user:vortex_password@db:5432/vortex_db?schema=public
+      ACCESS_TOKEN_SECRET: vortex_access_secret_2026
+      REFRESH_TOKEN_SECRET: vortex_refresh_secret_2026
       PORT: 3001
       NODE_ENV: production
     ports:
