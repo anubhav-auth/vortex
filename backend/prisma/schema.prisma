@@ -1,11 +1,9 @@
 generator client {
   provider = "prisma-client-js"
-  engineType = "binary"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum Role {
@@ -35,6 +33,10 @@ model GlobalConfig {
   showMarks           Boolean @default(false)
   broadcastSubject    String?
   broadcastText       String?
+  minTeamMembers      Int     @default(2)
+  maxTeamMembers      Int     @default(5)
+  minFemaleMembers    Int     @default(1)
+  minDomainExperts    Int     @default(1)
 }
 
 model Institute {
@@ -46,7 +48,6 @@ model Institute {
 model Domain {
   id                String             @id @default(cuid())
   name              String             @unique
-  minMembersDefault Int                @default(2)
   students          Student[]
   problemStatements ProblemStatement[]
   createdAt         DateTime           @default(now())
@@ -58,7 +59,6 @@ model ProblemStatement {
   description      String?  @db.Text
   domainId         String
   domain           Domain   @relation(fields: [domainId], references: [id])
-  minDomainMembers Int      @default(2)
   createdAt        DateTime @default(now())
 
   students Student[]
@@ -70,6 +70,7 @@ model Student {
   fullName           String
   rollNumber         String?            @unique
   email              String             @unique
+  phone              String?            
   password           String?            
   summary            String?            @db.VarChar(1000)
   role               Role               @default(STUDENT)
@@ -87,6 +88,7 @@ model Student {
   verificationStatus VerificationStatus @default(PENDING)
   otp                String?
   otpVerified        Boolean            @default(false)
+  photo              String?            @db.Text
   createdAt          DateTime           @default(now())
 
   teams        TeamMember[]
