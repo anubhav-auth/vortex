@@ -13,6 +13,7 @@ import psRoutes from './routes/ps.js';
 import evaluationsRoutes from './routes/evaluations.js';
 import leaderboardRoutes from './routes/leaderboard.js';
 import adminRoutes from './routes/admin.js';
+import authRoutes from './routes/auth.js';
 const app = express();
 
 app.use(cors());
@@ -30,6 +31,7 @@ app.use('/api/problem-statements', psRoutes);
 app.use('/api/evaluations', evaluationsRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);            
 app.use('/api/admin', adminRoutes);
+app.use('/api/auth', authRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Route not found' });
