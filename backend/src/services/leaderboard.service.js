@@ -36,36 +36,29 @@ const computeFinal = (r1, r2, r3) => {
   return (r1 ?? 0) + (r2 ?? 0) + (r3 ?? 0);
 };
 
-// Single in-tx ranking sweep. Reads only the ranking-relevant columns.
-const reRankAll = async (tx) => {
-  const rows = await tx.leaderboardEntry.findMany({
-    select: { teamId: true, finalScore: true },
-    orderBy: [{ finalScore: 'desc' }, { teamId: 'asc' }],
-  });
-
-  let lastScore = null;
-  let lastRank = 0;
-  let position = 0;
-
-  for (const row of rows) {
-    position += 1;
-    let nextRank;
-    if (row.finalScore == null) {
-      nextRank = null;
-    } else if (row.finalScore === lastScore) {
-      nextRank = lastRank;
-    } else {
-      nextRank = position;
-      lastScore = row.finalScore;
-      lastRank = position;
-    }
-    // Skip writes when nothing changed — small cost for hot ranks.
-    await tx.leaderboardEntry.update({
-      where: { teamId: row.teamId },
-      data: { rank: nextRank },
-    });
-  }
-};
+// Single in-tx ranking sweep, executed as one SQL UPDATE-FROM. Uses
+// DENSE_RANK so ties share a rank and the next score gets rank+1
+// (matches the previous JS behavior). Rows with null finalScore stay
+// null. `IS DISTINCT FROM` skips writes when the rank didn't change.
+//
+// Postgres folds unquoted identifiers to lowercase; Prisma keeps the
+// model name as the table name with quoted camelCase columns, so all
+// identifiers below are quoted.
+const reRankAll = (tx) => tx.$executeRawUnsafe(`
+  UPDATE "LeaderboardEntry" l
+  SET "rank" = r.new_rank,
+      "updatedAt" = NOW()
+  FROM (
+    SELECT "teamId",
+           CASE
+             WHEN "finalScore" IS NULL THEN NULL
+             ELSE DENSE_RANK() OVER (ORDER BY "finalScore" DESC)
+           END AS new_rank
+    FROM "LeaderboardEntry"
+  ) r
+  WHERE l."teamId" = r."teamId"
+    AND (l."rank" IS DISTINCT FROM r.new_rank)
+`);
 
 export const leaderboardService = {
   /**
