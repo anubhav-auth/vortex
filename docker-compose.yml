@@ -22,11 +22,17 @@ services:
       dockerfile: Dockerfile
     restart: always
     environment:
-      DATABASE_URL: postgresql://vortex_user:vortex_password@db:5432/vortex_db?schema=public
-      ACCESS_TOKEN_SECRET: vortex_access_secret_2026
-      REFRESH_TOKEN_SECRET: vortex_refresh_secret_2026
-      PORT: 3001
       NODE_ENV: production
+      PORT: 3001
+      LOG_LEVEL: info
+      DATABASE_URL: postgresql://vortex_user:vortex_password@db:5432/vortex_db?schema=public
+      ACCESS_TOKEN_SECRET: vortex-access-secret-2026-please-rotate-32chars-min
+      ACCESS_TOKEN_EXPIRY: 2h
+      BCRYPT_ROUNDS: 12
+      CORS_ORIGIN: http://localhost:80,http://localhost:5173
+      ADMIN_SEED_EMAIL: admin@vortex.local
+      ADMIN_SEED_PASSWORD: admin1234
+      JURY_SEED_PASSWORD: jury1234
     ports:
       - "3001:3001"
     depends_on:
