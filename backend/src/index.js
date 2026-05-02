@@ -12,6 +12,11 @@ import authRoutes from './routes/auth.js';
 import registrationRoutes from './routes/registration.js';
 import adminVerificationRoutes from './routes/adminVerification.js';
 import registryRoutes from './routes/registry.js';
+import teamRoutes from './routes/teams.js';
+import inviteRoutes from './routes/invites.js';
+import joinRequestRoutes from './routes/joinRequests.js';
+import membershipChangeRoutes from './routes/membershipChanges.js';
+import adminTeamRoutes from './routes/adminTeams.js';
 
 const app = express();
 
@@ -45,6 +50,11 @@ app.use('/api/auth', authRoutes);
 app.use('/api/registration', registrationRoutes);
 app.use('/api/admin/verification', adminVerificationRoutes);
 app.use('/api/admin/registry', registryRoutes);
+app.use('/api/teams', teamRoutes);
+app.use('/api/invites', inviteRoutes);
+app.use('/api/join-requests', joinRequestRoutes);
+app.use('/api/membership-changes', membershipChangeRoutes);
+app.use('/api/admin/teams', adminTeamRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
