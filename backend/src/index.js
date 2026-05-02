@@ -8,6 +8,11 @@ import { logger } from './utils/logger.js';
 import { requestLog } from './middleware/requestLog.js';
 import { notFoundHandler, errorHandler } from './middleware/error.js';
 
+import authRoutes from './routes/auth.js';
+import registrationRoutes from './routes/registration.js';
+import adminVerificationRoutes from './routes/adminVerification.js';
+import registryRoutes from './routes/registry.js';
+
 const app = express();
 
 app.disable('x-powered-by');
@@ -36,8 +41,10 @@ app.use(requestLog);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 
-// Route mounts will be re-wired in the next step (auth, admin, teams, ...).
-// Intentionally left empty here so the middleware layer can land cleanly.
+app.use('/api/auth', authRoutes);
+app.use('/api/registration', registrationRoutes);
+app.use('/api/admin/verification', adminVerificationRoutes);
+app.use('/api/admin/registry', registryRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
