@@ -1,4 +1,5 @@
 import { Conflict, Forbidden, NotFound } from '../utils/errors.js';
+import { rulesService } from './rules.service.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CENTRAL MEMBERSHIP WRITER
@@ -154,6 +155,9 @@ export const membershipService = {
     await cancelOtherPendingForUser(tx, { userId: user.id, exceptTeamId: team.id });
     await cancelTeamPendingIfFull(tx, team.id, maxTeamSize);
 
+    // Final step in every team mutation: recompute qualification.
+    await rulesService.recomputeTeamStatus(tx, team.id);
+
     return member;
   },
 
@@ -199,6 +203,8 @@ export const membershipService = {
       },
     });
 
+    await rulesService.recomputeTeamStatus(tx, teamId);
+
     return { disbanded: false };
   },
 
@@ -222,6 +228,7 @@ export const membershipService = {
       where: { id: teamId },
       data: { memberCount, femaleCount, domainExpertCount },
     });
+    await rulesService.recomputeTeamStatus(tx, teamId);
     return { memberCount, femaleCount, domainExpertCount };
   },
 };

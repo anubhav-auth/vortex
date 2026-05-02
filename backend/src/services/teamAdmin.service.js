@@ -124,7 +124,14 @@ export const teamAdminService = {
 
   async recount({ teamId }) {
     return prisma.$transaction(async (tx) => {
-      return membershipService.recountTeam(tx, teamId);
+      const counters = await membershipService.recountTeam(tx, teamId);
+      // recountTeam already calls rulesService.recomputeTeamStatus inside
+      // the same tx. Read the post-update team for the response.
+      const team = await tx.team.findUnique({
+        where: { id: teamId },
+        select: { id: true, status: true, adminOverride: true, ...Object.fromEntries(Object.keys(counters).map((k) => [k, true])) },
+      });
+      return { team, counters };
     });
   },
 };

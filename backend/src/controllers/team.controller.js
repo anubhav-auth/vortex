@@ -1,5 +1,7 @@
 import { teamService } from '../services/team.service.js';
+import { rulesService } from '../services/rules.service.js';
 import { auditService } from '../services/audit.service.js';
+import { prisma } from '../config/db.js';
 import { NotFound } from '../utils/errors.js';
 
 export const create = async (req, res) => {
@@ -30,6 +32,21 @@ export const list = async (req, res) => {
 export const listJoinable = async (req, res) => {
   const teams = await teamService.listJoinable(req.query);
   res.json({ count: teams.length, teams });
+};
+
+// Live preview of qualification for a single team. Read-only, no status flip.
+export const evaluate = async (req, res) => {
+  const team = await prisma.team.findUnique({
+    where: { id: req.params.id },
+    select: {
+      id: true, name: true, status: true, adminOverride: true,
+      memberCount: true, femaleCount: true, domainExpertCount: true,
+    },
+  });
+  if (!team) throw NotFound('Team not found');
+  const rules = await rulesService.get();
+  const { isQualified, issues } = rulesService.evaluateTeam(team, rules);
+  res.json({ team, isQualified, issues, rules });
 };
 
 export const finalize = async (req, res) => {

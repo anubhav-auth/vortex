@@ -39,6 +39,11 @@ router.get('/:id',
   ah(team.get),
 );
 
+router.get('/:id/evaluation',
+  validate({ params: teamIdParamSchema }),
+  ah(team.evaluate),
+);
+
 router.post('/:id/finalize',
   requireRole('STUDENT'),
   validate({ params: teamIdParamSchema }),
