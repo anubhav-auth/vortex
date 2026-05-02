@@ -27,6 +27,8 @@ import adminAuditRoutes from './routes/adminAudit.js';
 import { publicRouter as taxonomyPublicRouter, adminRouter as taxonomyAdminRouter } from './routes/taxonomy.js';
 import awardsRoutes from './routes/awards.js';
 
+import { initIO, closeIO } from './realtime/io.js';
+
 const app = express();
 
 app.disable('x-powered-by');
@@ -83,8 +85,11 @@ const server = app.listen(env.PORT, () => {
   logger.info('server started', { port: env.PORT, env: env.NODE_ENV });
 });
 
+initIO(server);
+
 const shutdown = async (signal) => {
   logger.info('shutdown', { signal });
+  await closeIO();
   server.close(async () => {
     await prisma.$disconnect();
     process.exit(0);
