@@ -19,6 +19,7 @@ import * as team    from '../controllers/team.controller.js';
 import * as invite  from '../controllers/invite.controller.js';
 import * as join    from '../controllers/joinRequest.controller.js';
 import * as change  from '../controllers/membershipChange.controller.js';
+import * as evaluation from '../controllers/evaluation.controller.js';
 
 const router = Router();
 
@@ -42,6 +43,11 @@ router.get('/:id',
 router.get('/:id/evaluation',
   validate({ params: teamIdParamSchema }),
   ah(team.evaluate),
+);
+
+router.get('/:id/scores',
+  validate({ params: teamIdParamSchema }),
+  ah(evaluation.teamScores),
 );
 
 router.post('/:id/finalize',

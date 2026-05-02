@@ -18,6 +18,10 @@ import joinRequestRoutes from './routes/joinRequests.js';
 import membershipChangeRoutes from './routes/membershipChanges.js';
 import adminTeamRoutes from './routes/adminTeams.js';
 import adminRulesRoutes from './routes/adminRules.js';
+import adminJuryRoutes from './routes/adminJury.js';
+import adminRoundsRoutes from './routes/adminRounds.js';
+import juryRoutes from './routes/jury.js';
+import leaderboardRoutes from './routes/leaderboard.js';
 
 const app = express();
 
@@ -57,6 +61,10 @@ app.use('/api/join-requests', joinRequestRoutes);
 app.use('/api/membership-changes', membershipChangeRoutes);
 app.use('/api/admin/teams', adminTeamRoutes);
 app.use('/api/admin/rules', adminRulesRoutes);
+app.use('/api/admin/jury-assignments', adminJuryRoutes);
+app.use('/api/admin/rounds', adminRoundsRoutes);
+app.use('/api/jury', juryRoutes);
+app.use('/api/leaderboard', leaderboardRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
