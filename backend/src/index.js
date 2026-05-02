@@ -24,6 +24,7 @@ import juryRoutes from './routes/jury.js';
 import leaderboardRoutes from './routes/leaderboard.js';
 import { publicRouter as broadcastPublicRouter, adminRouter as broadcastAdminRouter } from './routes/broadcast.js';
 import adminAuditRoutes from './routes/adminAudit.js';
+import { publicRouter as taxonomyPublicRouter, adminRouter as taxonomyAdminRouter } from './routes/taxonomy.js';
 
 const app = express();
 
@@ -70,6 +71,8 @@ app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/broadcast', broadcastPublicRouter);
 app.use('/api/admin/broadcast', broadcastAdminRouter);
 app.use('/api/admin/audit-logs', adminAuditRoutes);
+app.use('/api/taxonomy', taxonomyPublicRouter);
+app.use('/api/admin/taxonomy', taxonomyAdminRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
