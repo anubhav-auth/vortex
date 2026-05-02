@@ -1,4 +1,5 @@
 import { inviteService } from '../services/invite.service.js';
+import { emitInviteReceived } from '../realtime/emitter.js';
 
 export const create = async (req, res) => {
   const invite = await inviteService.create({
@@ -6,6 +7,11 @@ export const create = async (req, res) => {
     inviterId: req.user.id,
     inviteeId: req.body.inviteeId,
   });
+
+  // Push to the invitee's private inbox so they see the invite without
+  // polling. Best-effort: failure to emit must not roll back the invite.
+  emitInviteReceived(req.body.inviteeId, invite);
+
   res.status(201).json({ invite });
 };
 

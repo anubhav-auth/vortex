@@ -1,5 +1,6 @@
 import { broadcastService } from '../services/broadcast.service.js';
 import { auditService } from '../services/audit.service.js';
+import { emitBroadcastNew } from '../realtime/emitter.js';
 
 export const create = async (req, res) => {
   const broadcast = await broadcastService.create({
@@ -14,6 +15,9 @@ export const create = async (req, res) => {
     entityId: broadcast.id,
     details: { length: broadcast.message.length },
   });
+
+  // Real-time fan-out to every connected, authenticated socket.
+  emitBroadcastNew(broadcast);
 
   res.status(201).json({ broadcast });
 };
