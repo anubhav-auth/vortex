@@ -1,0 +1,184 @@
+import { prisma } from '../config/db.js';
+import { Conflict, Forbidden, NotFound, BadRequest } from '../utils/errors.js';
+import { membershipService } from './membership.service.js';
+import { rulesService } from './rules.service.js';
+
+const TEAM_DETAIL_INCLUDE = {
+  domain: { select: { id: true, name: true } },
+  problemStatement: { select: { id: true, title: true } },
+  leader: { select: { id: true, fullName: true, email: true } },
+  members: {
+    select: {
+      role: true,
+      joinedAt: true,
+      user: {
+        select: {
+          id: true, fullName: true, email: true, gender: true,
+          isDomainExpert: true, profilePicUrl: true,
+          domain: { select: { id: true, name: true } },
+        },
+      },
+    },
+  },
+};
+
+const TEAM_LIST_FIELDS = {
+  id: true, name: true, status: true,
+  memberCount: true, femaleCount: true, domainExpertCount: true,
+  createdAt: true, finalizedAt: true, adminOverride: true,
+  domain: { select: { id: true, name: true } },
+  problemStatement: { select: { id: true, title: true } },
+  leader: { select: { id: true, fullName: true } },
+};
+
+export const teamService = {
+  /**
+   * Create a team. The creator becomes its LEADER and first member.
+   * Refuses if the user is already in any team (DB-enforced via
+   * Team.leaderId @unique AND TeamMember.userId @unique).
+   */
+  async create({ name, domainId, psId, leaderId }) {
+    return prisma.$transaction(async (tx) => {
+      const leader = await membershipService.loadUserOrThrow(tx, leaderId);
+      if (leader.role !== 'STUDENT') throw Forbidden('Only students can create teams');
+      if (leader.verificationStatus !== 'VERIFIED') {
+        throw Forbidden('Account is not verified');
+      }
+
+      const rules = await rulesService.get(tx);
+      if (!rules.registrationOpen) throw Forbidden('Team registration is currently closed');
+
+      // Domain & PS sanity checks (cheap, useful errors).
+      const domain = await tx.domain.findUnique({ where: { id: domainId } });
+      if (!domain) throw BadRequest('Invalid domain');
+      if (psId) {
+        const ps = await tx.problemStatement.findUnique({
+          where: { id: psId },
+          select: { id: true, domainId: true },
+        });
+        if (!ps) throw BadRequest('Invalid problem statement');
+        if (ps.domainId !== domainId) {
+          throw BadRequest('Problem statement does not belong to chosen domain');
+        }
+      }
+
+      let team;
+      try {
+        team = await tx.team.create({
+          data: {
+            name,
+            domainId,
+            psId,
+            leaderId,
+            status: 'FORMING',
+            memberCount: 0,
+            femaleCount: 0,
+            domainExpertCount: 0,
+          },
+          select: { id: true, name: true, status: true, leaderId: true, domainId: true,
+                    memberCount: true, femaleCount: true, domainExpertCount: true },
+        });
+      } catch (err) {
+        if (err.code === 'P2002') {
+          const target = String(err.meta?.target ?? '');
+          if (target.includes('leaderId')) throw Conflict('You already lead a team');
+          throw Conflict('Team name already taken', { field: 'name' });
+        }
+        throw err;
+      }
+
+      await membershipService.addMember(tx, {
+        team,
+        user: leader,
+        role: 'LEADER',
+        maxTeamSize: rules.maxTeamSize,
+      });
+
+      return tx.team.findUnique({ where: { id: team.id }, include: TEAM_DETAIL_INCLUDE });
+    });
+  },
+
+  get(idOrName) {
+    return prisma.team.findFirst({
+      where: { OR: [{ id: idOrName }, { name: idOrName }] },
+      include: TEAM_DETAIL_INCLUDE,
+    });
+  },
+
+  list({ status, domainId, psId, search } = {}) {
+    return prisma.team.findMany({
+      where: {
+        ...(status && { status }),
+        ...(domainId && { domainId }),
+        ...(psId && { psId }),
+        ...(search && {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { leader: { fullName: { contains: search, mode: 'insensitive' } } },
+          ],
+        }),
+      },
+      select: TEAM_LIST_FIELDS,
+      orderBy: { createdAt: 'desc' },
+    });
+  },
+
+  // Teams a user could join right now: same PS (if user has one), still
+  // FORMING, not full, not finalized. Annotate with what they're missing.
+  async listJoinable({ psId } = {}) {
+    const rules = await rulesService.get();
+    const teams = await prisma.team.findMany({
+      where: {
+        status: 'FORMING',
+        ...(psId && { psId }),
+        memberCount: { lt: rules.maxTeamSize },
+      },
+      select: TEAM_LIST_FIELDS,
+      orderBy: { createdAt: 'desc' },
+    });
+    return teams.map((t) => ({
+      ...t,
+      missing: rulesService.unmetReasons(t, rules),
+    }));
+  },
+
+  /**
+   * Leader-initiated finalization. Refuses if rules unmet (admin override
+   * is a separate path). Atomic: re-reads team within tx to avoid TOCTOU.
+   */
+  async finalize({ teamId, actorId }) {
+    return prisma.$transaction(async (tx) => {
+      const team = await membershipService.loadTeamForUpdate(tx, teamId);
+      if (team.leaderId !== actorId) throw Forbidden('Only the team leader can finalize');
+      if (team.status === 'FINALIZED') throw Conflict('Team is already finalized');
+      if (team.status === 'DISQUALIFIED') throw Conflict('Team is disqualified');
+
+      const rules = await rulesService.get(tx);
+      const unmet = rulesService.unmetReasons(team, rules);
+      if (unmet.length) {
+        throw Conflict('Team does not meet qualification rules', { unmet });
+      }
+
+      // Cancel any still-open invites/requests for this team — finalization
+      // closes the door. Use the same cancel-on-full helper logic by
+      // running both updateMany calls explicitly (team isn't necessarily
+      // at maxSize, just locked).
+      await tx.teamInvite.updateMany({
+        where: { teamId, status: 'PENDING' },
+        data: { status: 'CANCELLED', respondedAt: new Date() },
+      });
+      await tx.joinRequest.updateMany({
+        where: { teamId, status: 'PENDING' },
+        data: { status: 'CANCELLED', respondedAt: new Date() },
+      });
+
+      return tx.team.update({
+        where: { id: teamId },
+        data: { status: 'FINALIZED', finalizedAt: new Date() },
+        include: TEAM_DETAIL_INCLUDE,
+      });
+    });
+  },
+
+  detailInclude: TEAM_DETAIL_INCLUDE,
+};
