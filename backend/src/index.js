@@ -17,6 +17,7 @@ import inviteRoutes from './routes/invites.js';
 import joinRequestRoutes from './routes/joinRequests.js';
 import membershipChangeRoutes from './routes/membershipChanges.js';
 import adminTeamRoutes from './routes/adminTeams.js';
+import adminRulesRoutes from './routes/adminRules.js';
 
 const app = express();
 
@@ -55,6 +56,7 @@ app.use('/api/invites', inviteRoutes);
 app.use('/api/join-requests', joinRequestRoutes);
 app.use('/api/membership-changes', membershipChangeRoutes);
 app.use('/api/admin/teams', adminTeamRoutes);
+app.use('/api/admin/rules', adminRulesRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
