@@ -13,6 +13,7 @@ import {
   listTeamRequestsQuerySchema,
   leaveSchema,
   dismissSchema,
+  transferLeadershipSchema,
 } from '../validators/team.schema.js';
 
 import * as team    from '../controllers/team.controller.js';
@@ -54,6 +55,12 @@ router.post('/:id/finalize',
   requireRole('STUDENT'),
   validate({ params: teamIdParamSchema }),
   ah(team.finalize),
+);
+
+router.post('/:id/transfer-leadership',
+  requireRole('STUDENT'),
+  validate({ params: teamIdParamSchema, body: transferLeadershipSchema }),
+  ah(team.transferLeadership),
 );
 
 // ── invites scoped to a team

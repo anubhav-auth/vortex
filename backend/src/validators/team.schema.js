@@ -52,6 +52,11 @@ export const dismissSchema = z.object({
 
 export const changeIdParamSchema = z.object({ changeId: cuid });
 
+// ── transfer leadership
+export const transferLeadershipSchema = z.object({
+  newLeaderId: cuid,
+});
+
 // ── admin override
 export const forceAddSchema = z.object({
   userId: cuid,

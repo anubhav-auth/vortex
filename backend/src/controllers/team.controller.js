@@ -49,6 +49,20 @@ export const evaluate = async (req, res) => {
   res.json({ team, isQualified, issues, rules });
 };
 
+export const transferLeadership = async (req, res) => {
+  const team = await teamService.transferLeadership({
+    teamId:      req.params.id,
+    actorId:     req.user.id,
+    newLeaderId: req.body.newLeaderId,
+  });
+  auditService.record({
+    actorId: req.user.id, action: 'TEAM_FORCE_MODIFIED',
+    entityType: 'Team', entityId: team.id,
+    details: { op: 'transferLeadership', from: req.user.id, to: req.body.newLeaderId },
+  });
+  res.json({ team });
+};
+
 export const finalize = async (req, res) => {
   const team = await teamService.finalize({
     teamId:  req.params.id,

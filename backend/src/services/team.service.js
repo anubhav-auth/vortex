@@ -180,5 +180,58 @@ export const teamService = {
     });
   },
 
+  /**
+   * Transfer leadership to an existing team member. Atomic:
+   *   - re-read team inside tx (TOCTOU-safe)
+   *   - actor must be current leader
+   *   - new leader must already be a member of this team
+   *   - team must not be FINALIZED / DISQUALIFIED
+   *   - flip Team.leaderId, swap MemberRole on both rows
+   * Does NOT change qualification — counts and rules are unaffected by
+   * which member holds the leader title, so no rules.recompute needed.
+   */
+  async transferLeadership({ teamId, actorId, newLeaderId }) {
+    if (actorId === newLeaderId) throw BadRequest('You are already the leader');
+
+    return prisma.$transaction(async (tx) => {
+      const team = await tx.team.findUnique({
+        where: { id: teamId },
+        select: { id: true, leaderId: true, status: true },
+      });
+      if (!team) throw NotFound('Team not found');
+      if (team.leaderId !== actorId) throw Forbidden('Only the current leader can transfer leadership');
+      if (team.status === 'FINALIZED') throw Conflict('Team is finalized; leadership cannot change');
+      if (team.status === 'DISQUALIFIED') throw Conflict('Team is disqualified');
+
+      const newLeaderMembership = await tx.teamMember.findUnique({
+        where: { teamId_userId: { teamId, userId: newLeaderId } },
+        select: { role: true },
+      });
+      if (!newLeaderMembership) throw BadRequest('New leader must already be a member of this team');
+
+      // Three writes, all in this txn:
+      //   1. Demote current leader's TeamMember row to MEMBER
+      //   2. Promote new leader's TeamMember row to LEADER
+      //   3. Update Team.leaderId
+      // Team.leaderId @unique enforces single-leader globally; since both
+      // ids belong to this team and the old/new leader swap is symmetric,
+      // there's no constraint conflict.
+      await tx.teamMember.update({
+        where: { teamId_userId: { teamId, userId: actorId } },
+        data: { role: 'MEMBER' },
+      });
+      await tx.teamMember.update({
+        where: { teamId_userId: { teamId, userId: newLeaderId } },
+        data: { role: 'LEADER' },
+      });
+      await tx.team.update({
+        where: { id: teamId },
+        data: { leaderId: newLeaderId },
+      });
+
+      return tx.team.findUnique({ where: { id: teamId }, include: TEAM_DETAIL_INCLUDE });
+    });
+  },
+
   detailInclude: TEAM_DETAIL_INCLUDE,
 };
