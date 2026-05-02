@@ -4,52 +4,62 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 
-import domainRoutes from './routes/domains.js';
-import instituteRoutes from './routes/institutes.js';
-import awardRoutes from './routes/awards.js';  
-import studentRoutes from './routes/students.js';
-import teamRoutes from './routes/teams.js'; 
-import psRoutes from './routes/ps.js';
-import evaluationsRoutes from './routes/evaluations.js';
-import leaderboardRoutes from './routes/leaderboard.js';
-import adminRoutes from './routes/admin.js';
-import authRoutes from './routes/auth.js';
+import { logger } from './utils/logger.js';
+import { requestLog } from './middleware/requestLog.js';
+import { notFoundHandler, errorHandler } from './middleware/error.js';
+
 const app = express();
 
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
+
+// Security headers first, then CORS so preflights carry helmet's headers too.
 app.use(helmet());
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      // allow same-origin / curl / server-to-server (no Origin header)
+      if (!origin) return cb(null, true);
+      if (env.CORS_ORIGIN.includes(origin)) return cb(null, true);
+      cb(new Error(`CORS: origin ${origin} not allowed`));
+    },
+    credentials: true,
+  }),
+);
+
+// Generous JSON limit — registration carries a base64 photo until we move to
+// object storage. Tune downward once uploads are externalized.
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+
+app.use(requestLog);
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
-app.use('/api/domains', domainRoutes);
-app.use('/api/institutes', instituteRoutes);
-app.use('/api/awards', awardRoutes); 
-app.use('/api', studentRoutes);   
-app.use('/api/teams', teamRoutes);
-app.use('/api/problem-statements', psRoutes);
-app.use('/api/evaluations', evaluationsRoutes);
-app.use('/api/leaderboard', leaderboardRoutes);            
-app.use('/api/admin', adminRoutes);
-app.use('/api/auth', authRoutes);
 
-app.use((_req, res) => {
-  res.status(404).json({ error: 'Route not found' });
-});
+// Route mounts will be re-wired in the next step (auth, admin, teams, ...).
+// Intentionally left empty here so the middleware layer can land cleanly.
 
-app.use((err, _req, res, _next) => {
-  console.error(err.stack);
-  res.status(err.status ?? 500).json({ error: err.message ?? 'Internal server error' });
-});
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 const server = app.listen(env.PORT, () => {
-  console.log(`Server running on port ${env.PORT}`);
+  logger.info('server started', { port: env.PORT, env: env.NODE_ENV });
 });
 
-const shutdown = async () => {
-  await prisma.$disconnect();
-  server.close(() => process.exit(0));
+const shutdown = async (signal) => {
+  logger.info('shutdown', { signal });
+  server.close(async () => {
+    await prisma.$disconnect();
+    process.exit(0);
+  });
+  // hard exit if close() hangs
+  setTimeout(() => process.exit(1), 10_000).unref();
 };
 
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('unhandledRejection', (reason) => logger.error('unhandledRejection', { reason: String(reason) }));
+process.on('uncaughtException', (err) => {
+  logger.error('uncaughtException', { err: err.message, stack: err.stack });
+  process.exit(1);
+});
