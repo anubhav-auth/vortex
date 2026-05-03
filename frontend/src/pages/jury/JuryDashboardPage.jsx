@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Gavel, ClipboardCheck, Lock, Search, Send } from 'lucide-react';
+import {
+  Gavel, Lock, Search, Send, CheckCircle2, Eye,
+} from 'lucide-react';
 import { api } from '../../lib/api.js';
 import { useApi } from '../../hooks/useApi.js';
+import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useToast } from '../../contexts/ToastContext.jsx';
 import { PageHeader } from '../../components/ui/PageHeader.jsx';
-import { Tabs } from '../../components/ui/Tabs.jsx';
 import { Empty } from '../../components/ui/Empty.jsx';
 import { Badge } from '../../components/ui/Badge.jsx';
 import { Modal } from '../../components/ui/Modal.jsx';
@@ -13,15 +15,16 @@ import { Spinner } from '../../components/ui/Spinner.jsx';
 import { FormField } from '../../components/ui/FormField.jsx';
 import { roundLabel } from '../../utils/format.js';
 
+// ─────────────────────────────────────────────────────────────────────────
+// Open scoring model:
+//   - any jury can score any FINALIZED team
+//   - DB still enforces ONE score per (team, round) — first jury owns it
+//   - the original scorer can edit; others see "Already scored by X"
+// ─────────────────────────────────────────────────────────────────────────
+
 const ROUNDS = ['ROUND_1', 'ROUND_2', 'ROUND_3'];
+const ROUND_FIELD = { ROUND_1: 'round1State', ROUND_2: 'round2State', ROUND_3: 'round3State' };
 
-const ROUND_FIELD = {
-  ROUND_1: 'round1State',
-  ROUND_2: 'round2State',
-  ROUND_3: 'round3State',
-};
-
-// ── 5-metric score form ──────────────────────────────────────────────────
 const METRICS = [
   { key: 'innovation',   label: 'Innovation & Novelty' },
   { key: 'complexity',   label: 'Technical Complexity' },
@@ -30,6 +33,44 @@ const METRICS = [
   { key: 'feasibility',  label: 'Feasibility & Scalability' },
 ];
 
+// ── Score chip per team-row, per round ───────────────────────────────────
+const RoundChip = ({ round, evalRow, mine, locked, onClick }) => {
+  // States: open (no eval), mine (i scored), other (someone else scored), locked
+  let label = round.replace('_', ' ');
+  let tone = 'dim';
+  let detail = locked ? 'Locked' : 'Open';
+
+  if (evalRow) {
+    detail = `${evalRow.total}/50 · ${evalRow.jury.fullName.split(' ')[0]}`;
+    tone = mine ? 'live' : 'cyan';
+  } else if (!locked) {
+    tone = 'warn';
+  }
+
+  const clickable = !locked && (mine || !evalRow);
+  return (
+    <button
+      type="button"
+      disabled={!clickable}
+      onClick={onClick}
+      className={`group flex w-full flex-col gap-1 rounded-[4px] border p-3 text-left transition-colors ${
+        clickable
+          ? 'border-border-dim hover:border-accent-cyan hover:bg-white/[0.03]'
+          : 'cursor-not-allowed border-border-dim/60 opacity-70'
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-text-dim">{label}</span>
+        <Badge tone={tone}>{evalRow ? (mine ? 'Mine' : 'Scored') : (locked ? 'Locked' : 'Open')}</Badge>
+      </div>
+      <span className={`font-mono text-[12px] ${tone === 'live' ? 'text-status-live' : tone === 'cyan' ? 'text-accent-cyan' : tone === 'warn' ? 'text-status-warn' : 'text-text-dim'}`}>
+        {detail}
+      </span>
+    </button>
+  );
+};
+
+// ── Score form ───────────────────────────────────────────────────────────
 const ScoreSlider = ({ label, value, onChange }) => (
   <div className="space-y-1.5">
     <div className="flex items-center justify-between font-mono text-[11px] uppercase tracking-[0.15em] text-text-secondary">
@@ -46,7 +87,7 @@ const ScoreSlider = ({ label, value, onChange }) => (
   </div>
 );
 
-const EvaluationModal = ({ open, onClose, assignment, roundUnlocked, existing, onSaved }) => {
+const ScoreModal = ({ open, onClose, team, round, existing, roundUnlocked, onSaved }) => {
   const toast = useToast();
   const [scores, setScores] = useState(() => ({
     innovation:   existing?.innovation   ?? 5,
@@ -58,44 +99,41 @@ const EvaluationModal = ({ open, onClose, assignment, roundUnlocked, existing, o
   const [feedback, setFeedback] = useState(existing?.feedback ?? '');
   const [busy, setBusy] = useState(false);
 
+  if (!team || !round) return null;
+
   const total = METRICS.reduce((s, m) => s + (scores[m.key] ?? 0), 0);
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!roundUnlocked) {
-      toast.warn('Round is not currently open for scoring.');
-      return;
-    }
+    if (!roundUnlocked) { toast.warn('Round is not currently open.'); return; }
     setBusy(true);
     try {
       await api.post('/api/jury/evaluations', {
-        teamId: assignment.team.id,
-        round:  assignment.round,
+        teamId: team.id,
+        round,
         scores,
         feedback: feedback.trim() || undefined,
       });
-      toast.success('Evaluation saved.');
+      toast.success('Score saved.');
       onSaved?.();
       onClose();
     } catch (err) {
-      toast.error(err.message);
+      // Most useful message: someone else got there first.
+      if (err.code === 'CONFLICT' && err.details?.scoredBy) {
+        toast.error(`Already scored by ${err.details.scoredBy}.`);
+      } else {
+        toast.error(err.message);
+      }
     } finally { setBusy(false); }
   };
 
-  if (!assignment) return null;
-
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      size="lg"
-      title={`${roundLabel(assignment.round)} · ${assignment.team.name}`}
-    >
+    <Modal open={open} onClose={onClose} size="lg" title={`${roundLabel(round)} · ${team.name}`}>
       <form onSubmit={submit} className="space-y-5">
         <div className="rounded-[4px] border border-border-dim bg-bg-void p-4">
-          <div className="kicker mb-1">{assignment.team.domain?.name}</div>
+          <div className="kicker mb-1">{team.domain?.name}</div>
           <div className="font-sans text-[14px] text-text-primary">
-            {assignment.team.problemStatement?.title ?? 'No problem statement assigned'}
+            {team.problemStatement?.title ?? 'No problem statement assigned'}
           </div>
         </div>
 
@@ -143,118 +181,196 @@ const EvaluationModal = ({ open, onClose, assignment, roundUnlocked, existing, o
   );
 };
 
-// ── Page ──────────────────────────────────────────────────────────────────
+// ── Read-only modal for scores owned by another jury ─────────────────────
+const ViewModal = ({ open, onClose, team, round, evalRow }) => {
+  if (!team || !round || !evalRow) return null;
+  return (
+    <Modal open={open} onClose={onClose} size="md" title={`${roundLabel(round)} · ${team.name}`}>
+      <div className="space-y-4">
+        <div className="flex items-center gap-3 rounded-[4px] border border-accent-cyan/40 bg-accent-cyan/5 px-4 py-3 font-mono text-[12px] text-accent-cyan">
+          <CheckCircle2 size={14} /> Already scored by {evalRow.jury.fullName}.
+        </div>
+        <div className="grid grid-cols-2 gap-3 font-mono text-[12px]">
+          {METRICS.map((m) => (
+            <div key={m.key} className="rounded-[4px] border border-border-dim bg-bg-void p-3">
+              <div className="text-text-dim">{m.label}</div>
+              <div className="text-text-primary">{evalRow[m.key]} / 10</div>
+            </div>
+          ))}
+        </div>
+        <div className="rounded-[4px] border border-border-dim bg-bg-void p-3 font-mono text-[13px]">
+          Total: <span className="text-accent-cyan">{evalRow.total}</span> / 50
+        </div>
+        {evalRow.feedback && (
+          <div>
+            <div className="section-label mb-2">Feedback</div>
+            <p className="font-mono text-[12px] leading-relaxed text-text-secondary whitespace-pre-wrap">{evalRow.feedback}</p>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+};
+
+// ── Page ─────────────────────────────────────────────────────────────────
 export const JuryDashboardPage = () => {
-  const [round, setRound] = useState('ROUND_1');
+  const { user } = useAuth();
+  const toast = useToast();
   const [filter, setFilter] = useState('');
-  const [active, setActive] = useState(null); // active assignment for modal
+  // Active modal target: { team, round, evalRow, mine }
+  const [active, setActive] = useState(null);
 
-  const assignments = useApi(() => api.get('/api/jury/assignments', { query: { round } }), [round]);
-  const evaluations = useApi(() => api.get('/api/jury/evaluations', { query: { round } }), [round]);
-  // We need round state to gate submissions. Jury can't read /admin/rounds —
-  // the API will 409 inside the txn anyway. We rely on the toast in that case.
-  // For visual gating we attempt /api/admin/rounds and fall through silently.
-  const rounds = useApi(async () => {
-    try { return await api.get('/api/admin/rounds'); }
-    catch { return null; }
-  }, []);
-  const roundUnlocked = rounds.data?.control?.[ROUND_FIELD[round]] === 'UNLOCKED';
+  const board    = useApi(() => api.get('/api/jury/teams'), []);
+  const myEvals  = useApi(() => api.get('/api/jury/evaluations'), []);
+  const rounds   = useApi(() => api.get('/api/rounds'), []);
 
-  const evaluationsByTeam = useMemo(() => {
+  // Index existing evaluations by (teamId, round) for fast lookup. We need
+  // the FULL eval row (incl. metric values + feedback) for the edit form,
+  // which the board endpoint doesn't include — so merge in myEvals for the
+  // ones we own. For others we only have the summary from the board.
+  const myDetail = useMemo(() => {
     const map = new Map();
-    for (const e of evaluations.data?.evaluations ?? []) {
+    for (const e of myEvals.data?.evaluations ?? []) {
       map.set(`${e.team.id}:${e.round}`, e);
     }
     return map;
-  }, [evaluations.data]);
+  }, [myEvals.data]);
 
-  const visible = useMemo(() => {
-    const list = assignments.data?.assignments ?? [];
+  const teams = useMemo(() => {
+    const list = board.data?.teams ?? [];
     if (!filter) return list;
     const q = filter.toLowerCase();
-    return list.filter((a) => a.team.name.toLowerCase().includes(q));
-  }, [assignments.data, filter]);
+    return list.filter((t) =>
+      t.name.toLowerCase().includes(q) ||
+      t.domain?.name?.toLowerCase().includes(q) ||
+      t.problemStatement?.title?.toLowerCase().includes(q),
+    );
+  }, [board.data, filter]);
 
-  const tabs = ROUNDS.map((r) => {
-    const count = (assignments.data?.assignments ?? []).filter((a) => a.round === r).length;
-    return { value: r, label: roundLabel(r), badge: count || undefined, icon: ClipboardCheck };
-  });
+  const refresh = () => { board.refetch(); myEvals.refetch(); };
 
-  const refresh = () => { assignments.refetch(); evaluations.refetch(); };
+  const openSlot = (team, round, evalRow, mine) => {
+    if (mine && evalRow) {
+      // Pull full detail from myEvals (board summary is missing metric breakdown).
+      const detail = myDetail.get(`${team.id}:${round}`) ?? evalRow;
+      setActive({ team, round, evalRow: detail, mine: true });
+    } else if (!evalRow) {
+      setActive({ team, round, evalRow: null, mine: true }); // mine because we'll own it
+    } else {
+      // Read-only view for someone else's score.
+      setActive({ team, round, evalRow, mine: false, view: true });
+    }
+  };
+
+  // Stats banner counts.
+  const counts = useMemo(() => {
+    const all = board.data?.teams ?? [];
+    let openSlots = 0, mySlots = 0, otherSlots = 0;
+    for (const t of all) {
+      const byRound = new Map(t.evaluations.map((e) => [e.round, e]));
+      for (const r of ROUNDS) {
+        const ev = byRound.get(r);
+        if (!ev) openSlots++;
+        else if (ev.jury.id === user.id) mySlots++;
+        else otherSlots++;
+      }
+    }
+    return { teams: all.length, openSlots, mySlots, otherSlots };
+  }, [board.data, user.id]);
 
   return (
     <section className="mx-auto max-w-6xl px-6 py-12">
       <PageHeader
         kicker="Jury Console"
-        title="Evaluations"
-        description="Submit scores for the teams you've been assigned. One submission per team per round."
+        title="Score teams"
+        description="Open scoring — pick any finalized team and round. First jury to score a round owns it; others can view but not overwrite."
         actions={
           <div className="relative w-72">
             <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-dim" />
-            <input className="input-glass pl-9" placeholder="Filter by team name…" value={filter} onChange={(e) => setFilter(e.target.value)} />
+            <input className="input-glass pl-9" placeholder="Filter team / domain / PS…" value={filter} onChange={(e) => setFilter(e.target.value)} />
           </div>
         }
       />
 
-      <Tabs className="mb-4" value={round} onChange={setRound} items={tabs} />
-
-      <div className="mb-4 flex items-center gap-2">
-        <Badge tone={roundUnlocked ? 'live' : 'warn'} dot>
-          {roundUnlocked ? 'Round open' : 'Round locked'}
-        </Badge>
-        <span className="font-mono text-[11px] text-text-dim">
-          {visible.length} assignment{visible.length !== 1 && 's'} in {roundLabel(round).toLowerCase()}
+      {/* Round-state strip */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {ROUNDS.map((r) => {
+          const state = rounds.data?.control?.[ROUND_FIELD[r]] ?? '…';
+          const tone  = state === 'UNLOCKED' ? 'live' : state === 'CLOSED' ? 'warn' : 'dim';
+          return <Badge key={r} tone={tone} dot>{r.replace('_',' ')} · {state}</Badge>;
+        })}
+        <span className="ml-auto font-mono text-[11px] text-text-dim">
+          {counts.teams} teams · {counts.openSlots} open · {counts.mySlots} mine · {counts.otherSlots} taken
         </span>
       </div>
 
-      {assignments.loading && <CardSkeleton rows={3} />}
-      {!assignments.loading && visible.length === 0 && (
+      {board.loading && <CardSkeleton rows={4} />}
+      {!board.loading && teams.length === 0 && (
         <Empty
           icon={Gavel}
-          title="No assignments"
-          description={`You don't have any teams to evaluate in ${roundLabel(round).toLowerCase()}. Contact organizers if this looks wrong.`}
+          title="No finalized teams"
+          description="Teams appear here once their leaders finalize. Check back soon."
         />
       )}
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {visible.map((a) => {
-          const submitted = evaluationsByTeam.get(`${a.team.id}:${a.round}`);
+      <div className="grid gap-3">
+        {teams.map((t) => {
+          const byRound = new Map(t.evaluations.map((e) => [e.round, e]));
           return (
-            <article key={a.id} className="glass-card flat space-y-3">
+            <article key={t.id} className="glass-card flat space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="kicker mb-1">{a.team.domain?.name}</div>
-                  <div className="font-sans text-[15px] font-bold text-text-primary">{a.team.name}</div>
+                  <div className="kicker mb-1">{t.domain?.name}</div>
+                  <div className="font-sans text-[15px] font-bold text-text-primary">{t.name}</div>
                   <div className="font-mono text-[12px] text-text-secondary">
-                    {a.team.problemStatement?.title ?? 'No PS assigned'}
+                    {t.problemStatement?.title ?? 'No PS assigned'}
                   </div>
                 </div>
-                {submitted ? (
-                  <Badge tone="live" dot>Scored · {submitted.total}/50</Badge>
-                ) : (
-                  <Badge tone="warn" dot>Pending</Badge>
-                )}
               </div>
-              <div className="flex justify-end">
-                <button
-                  className={submitted ? 'ghost-button' : 'glow-button'}
-                  onClick={() => setActive(a)}
-                >
-                  {submitted ? 'Edit score' : 'Score now'}
-                </button>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {ROUNDS.map((r) => {
+                  const ev = byRound.get(r);
+                  const mine = ev?.jury.id === user.id;
+                  const locked = rounds.data?.control?.[ROUND_FIELD[r]] !== 'UNLOCKED';
+                  return (
+                    <RoundChip
+                      key={r}
+                      round={r}
+                      evalRow={ev}
+                      mine={mine}
+                      locked={locked && !ev}  // a scored slot is still 'viewable' even if locked
+                      onClick={() => {
+                        if (ev && !mine) {
+                          // someone else scored — open read-only view
+                          setActive({ team: t, round: r, evalRow: ev, mine: false, view: true });
+                        } else {
+                          openSlot(t, r, ev, mine);
+                        }
+                      }}
+                    />
+                  );
+                })}
               </div>
             </article>
           );
         })}
       </div>
 
-      <EvaluationModal
-        open={!!active}
-        assignment={active}
-        existing={active ? evaluationsByTeam.get(`${active.team.id}:${active.round}`) : null}
-        roundUnlocked={roundUnlocked}
+      <ScoreModal
+        open={!!active && !active.view}
+        team={active?.team}
+        round={active?.round}
+        existing={active?.evalRow}
+        roundUnlocked={active && rounds.data?.control?.[ROUND_FIELD[active.round]] === 'UNLOCKED'}
         onClose={() => setActive(null)}
         onSaved={refresh}
+      />
+      <ViewModal
+        open={!!active && !!active.view}
+        team={active?.team}
+        round={active?.round}
+        evalRow={active?.evalRow}
+        onClose={() => setActive(null)}
       />
     </section>
   );

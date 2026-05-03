@@ -1,6 +1,6 @@
 import { NavLink, Outlet, Link } from 'react-router-dom';
 import {
-  Wind, Users, ShieldCheck, Database, Settings, Lock, Gavel, Megaphone,
+  Wind, Users, ShieldCheck, Database, Settings, Lock, Megaphone,
   History, Layers, ListChecks, LogOut,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
@@ -17,7 +17,6 @@ const NAV = [
   { to: '/admin/teams',                     label: 'Teams',        icon: Users     },
   { to: '/admin/rules',                     label: 'Rules',        icon: Settings  },
   { to: '/admin/rounds',                    label: 'Rounds',       icon: Lock      },
-  { to: '/admin/jury',                      label: 'Jury',         icon: Gavel     },
   { to: '/admin/taxonomy',                  label: 'Taxonomy',     icon: ListChecks },
   { to: '/admin/broadcast',                 label: 'Broadcast',    icon: Megaphone },
   { to: '/admin/audit',                     label: 'Audit Log',    icon: History   },

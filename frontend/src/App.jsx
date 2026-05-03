@@ -21,7 +21,6 @@ import { AdminRegistryPage }     from './pages/admin/AdminRegistryPage.jsx';
 import { AdminTeamsPage }        from './pages/admin/AdminTeamsPage.jsx';
 import { AdminRulesPage }        from './pages/admin/AdminRulesPage.jsx';
 import { AdminRoundsPage }       from './pages/admin/AdminRoundsPage.jsx';
-import { AdminJuryPage }         from './pages/admin/AdminJuryPage.jsx';
 import { AdminTaxonomyPage }     from './pages/admin/AdminTaxonomyPage.jsx';
 import { AdminBroadcastPage }    from './pages/admin/AdminBroadcastPage.jsx';
 import { AdminAuditPage }        from './pages/admin/AdminAuditPage.jsx';
@@ -50,7 +49,6 @@ export const App = () => (
       <Route path="/admin/teams"         element={<AdminTeamsPage />} />
       <Route path="/admin/rules"         element={<AdminRulesPage />} />
       <Route path="/admin/rounds"        element={<AdminRoundsPage />} />
-      <Route path="/admin/jury"          element={<AdminJuryPage />} />
       <Route path="/admin/taxonomy"      element={<AdminTaxonomyPage />} />
       <Route path="/admin/broadcast"     element={<AdminBroadcastPage />} />
       <Route path="/admin/audit"         element={<AdminAuditPage />} />
