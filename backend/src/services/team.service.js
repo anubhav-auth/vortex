@@ -39,8 +39,22 @@ const EXPLORE_MEMBER_FIELDS = {
   gender: true,
   isDomainExpert: true,
   track: true,
+  verificationStatus: true,
   institution: { select: { id: true, name: true } },
   domain: { select: { id: true, name: true } },
+  membership: {
+    select: {
+      teamId: true,
+      role: true,
+      team: {
+        select: {
+          id: true,
+          name: true,
+          status: true,
+        },
+      },
+    },
+  },
 };
 
 export const teamService = {
@@ -170,8 +184,6 @@ export const teamService = {
     return prisma.user.findMany({
       where: {
         role: 'STUDENT',
-        verificationStatus: 'VERIFIED',
-        membership: { is: null },
         ...(actorId && { NOT: { id: actorId } }),
         ...(search && {
           OR: [

@@ -282,6 +282,34 @@ const ExploreTab = ({ user, myTeam }) => {
     return null;
   }, [leaderOwnTeam, myTeam]);
 
+  const memberActionState = (member) => {
+    if (pendingInviteUserIds.has(member.id)) {
+      return { disabled: true, label: 'Invite pending', reason: 'An invite is already pending for this user.' };
+    }
+    if (member.membership?.team) {
+      return {
+        disabled: true,
+        label: 'Already in a team',
+        reason: `${member.fullName} is already in ${member.membership.team.name}.`,
+      };
+    }
+    if (member.verificationStatus !== 'VERIFIED') {
+      return {
+        disabled: true,
+        label: 'Not verified',
+        reason: 'This user must be verified before they can join a team.',
+      };
+    }
+    if (inviteDisabledReason) {
+      return {
+        disabled: true,
+        label: myTeam ? 'Invite unavailable' : 'Create team first',
+        reason: inviteDisabledReason,
+      };
+    }
+    return { disabled: false, label: 'Send invite', reason: 'Ready to invite.' };
+  };
+
   const sendInvite = async (inviteeId) => {
     if (!leaderOwnTeam) return;
     try {
@@ -321,13 +349,13 @@ const ExploreTab = ({ user, myTeam }) => {
   };
 
   return (
-    <div className="space-y-8">
-      <section className="space-y-3">
+    <div className="grid gap-8 xl:grid-cols-2 xl:items-start">
+      <section className="space-y-3 min-w-0">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="section-label">Available members</h2>
             <p className="font-mono text-[12px] text-text-secondary">
-              Verified students who are not already in a team.
+              Every registered student appears here, even if they already belong to a team.
             </p>
           </div>
           <div className="relative w-full max-w-xs">
@@ -343,18 +371,12 @@ const ExploreTab = ({ user, myTeam }) => {
 
         {members.loading || pendingInvites.loading ? <CardSkeleton rows={2} /> : null}
         {!members.loading && visibleMembers.length === 0 && (
-          <Empty icon={Users} title="No available members" description="Everyone verified is already in a team, or your filter excluded them." />
+          <Empty icon={Users} title="No members found" description="No registered student matched your current member search." />
         )}
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-4">
           {visibleMembers.map((member) => {
-            const invitePending = pendingInviteUserIds.has(member.id);
-            const disabled = invitePending || Boolean(inviteDisabledReason);
-            const buttonLabel = invitePending
-              ? 'Invite pending'
-              : inviteDisabledReason
-                ? myTeam ? 'Invite unavailable' : 'Create team first'
-                : 'Send invite';
+            const action = memberActionState(member);
 
             return (
               <article key={member.id} className="glass-card flat space-y-3">
@@ -367,6 +389,7 @@ const ExploreTab = ({ user, myTeam }) => {
                     <Badge tone="cyan">{member.domain?.name ?? 'No domain'}</Badge>
                     {member.gender === 'FEMALE' && <Badge tone="live">Female</Badge>}
                     {member.isDomainExpert && <Badge tone="warn">Expert</Badge>}
+                    {member.verificationStatus !== 'VERIFIED' && <Badge tone="warn">{titleCase(member.verificationStatus)}</Badge>}
                   </div>
                 </div>
 
@@ -376,18 +399,22 @@ const ExploreTab = ({ user, myTeam }) => {
                   <div className="sm:col-span-2">Institution: {member.institution?.name ?? '-'}</div>
                 </div>
 
-                {inviteDisabledReason && (
-                  <div className="font-mono text-[11px] text-text-dim">{inviteDisabledReason}</div>
+                {member.membership?.team && (
+                  <div className="font-mono text-[11px] text-text-secondary">
+                    Team: {member.membership.team.name} ({member.membership.team.status})
+                  </div>
                 )}
+
+                <div className="font-mono text-[11px] text-text-dim">{action.reason}</div>
 
                 <button
                   className="ghost-button inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={disabled}
+                  disabled={action.disabled}
                   onClick={() => sendInvite(member.id)}
-                  title={inviteDisabledReason ?? undefined}
+                  title={action.reason}
                 >
                   {pendingInvites.loading ? <Spinner size={12} /> : <UserPlus size={12} />}
-                  {buttonLabel}
+                  {action.label}
                 </button>
               </article>
             );
@@ -395,7 +422,7 @@ const ExploreTab = ({ user, myTeam }) => {
         </div>
       </section>
 
-      <section className="space-y-3">
+      <section className="space-y-3 min-w-0">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="section-label">Available teams</h2>
@@ -416,10 +443,10 @@ const ExploreTab = ({ user, myTeam }) => {
 
         {teams.loading || joinable.loading || outgoingRequests.loading ? <CardSkeleton rows={2} /> : null}
         {!teams.loading && visibleTeams.length === 0 && (
-          <Empty icon={Users} title="No other teams visible" description="There are no other teams yet, or your filter excluded them." />
+          <Empty icon={Users} title="No other teams visible" description="Your own team is hidden here. No other team matched your search." />
         )}
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-4">
           {visibleTeams.map((team) => {
             const action = teamActionState(team);
             return (
