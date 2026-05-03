@@ -1,23 +1,25 @@
 import { prisma } from '../config/db.js';
 import { Conflict, Forbidden, NotFound, BadRequest } from '../utils/errors.js';
-import { juryAssignmentService } from './juryAssignment.service.js';
 import { leaderboardService } from './leaderboard.service.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EVALUATION
 //
-// Score upsert with a strict authorization chain. Every guard is re-checked
-// inside the transaction so race conditions (admin reopens/closes a round
-// while a jury is mid-submit) cannot land bad data.
+// Open scoring model: any jury can score any FINALIZED team while the round
+// is UNLOCKED. The DB still enforces ONE canonical score per (team, round)
+// via Evaluation @@unique([teamId, round]) — the first jury to submit
+// "owns" the slot. Subsequent juries are rejected (the FE shows them an
+// 'already scored by X' badge so they know not to try).
 //
-// Scoring guards (in order):
+// Edits are restricted: the original scorer can update their own score.
+// A second jury attempting to overwrite is refused with 409.
+//
+// Scoring guards (all re-checked inside the transaction for race-safety):
 //   1. Team must be FINALIZED
-//   2. JuryAssignment(teamId, round) must exist and belong to this jury
-//   3. RoundControl[round] must be UNLOCKED
-//      (route layer also blocks via requireRoundUnlocked; service is the
-//       authoritative re-check)
-//   4. Each metric is 0..10 (validated at the route layer; service trusts
-//      the parsed body)
+//   2. RoundControl[round] must be UNLOCKED
+//   3. If an existing Evaluation exists, juryId must match (only original
+//      scorer can edit)
+//   4. Each metric is 0..10 (validated at the route layer)
 //
 // Server computes total. Client value is ignored even if present.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -62,10 +64,7 @@ export const evaluationService = {
         throw Conflict('Team must be FINALIZED before evaluation');
       }
 
-      // 2. Assignment must match this jury.
-      await juryAssignmentService.assertAssigned(tx, { teamId, round, juryId });
-
-      // 3. Round must be UNLOCKED — re-check inside tx (race-safe).
+      // 2. Round must be UNLOCKED — re-check inside tx (race-safe).
       const field = ROUND_FIELD[round];
       const control = await tx.roundControl.findUnique({
         where: { id: 'round_control' },
@@ -79,12 +78,24 @@ export const evaluationService = {
         });
       }
 
+      // 3. If a score already exists, only the original jury can edit it.
+      // Open-scoring rule: first jury to submit owns the (team, round) slot.
+      const existing = await tx.evaluation.findUnique({
+        where: { teamId_round: { teamId, round } },
+        select: { juryId: true, jury: { select: { fullName: true } } },
+      });
+      if (existing && existing.juryId !== juryId) {
+        throw Conflict('This team has already been scored for this round', {
+          scoredBy: existing.jury?.fullName,
+        });
+      }
+
       const total = computeTotal(scores);
 
       const evaluation = await tx.evaluation.upsert({
         where: { teamId_round: { teamId, round } },
         update: {
-          juryId, // stays the same as the assignment's jury
+          juryId, // same juryId — the existing-jury check above guarantees this
           innovation:   scores.innovation,
           complexity:   scores.complexity,
           presentation: scores.presentation,

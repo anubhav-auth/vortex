@@ -17,6 +17,12 @@ const router = Router();
 
 router.use(requireAuth, requireRole('JURY'));
 
+// Open-scoring board: every FINALIZED team with their per-round score state.
+// Replaces the old assignment-list as the jury's primary view.
+router.get('/teams', ah(evaluation.scoringBoard));
+
+// Legacy: still served so any caller that references it works, but the
+// admin-side assignment UI has been removed.
 router.get('/assignments',
   validate({ query: myAssignmentsQuerySchema }),
   ah(juryAssignment.myAssignments),
