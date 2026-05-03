@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Users, Plus, UserPlus, Send, ShieldCheck, AlertTriangle, LogOut,
   UserMinus, Crown, Search, Sparkles, CheckCircle2, XCircle,
@@ -176,41 +176,133 @@ const JoinableList = () => {
 // ── Invite modal (leader only) ────────────────────────────────────────────
 const InviteModal = ({ open, onClose, teamId, onSent }) => {
   const toast = useToast();
-  const [email, setEmail] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [registrationNo, setRegistrationNo] = useState('');
+  const [busyId, setBusyId] = useState('');
 
-  // For now, we pass an inviteeId — the registration emails are unique, but
-  // the API requires id. We'll resolve by listing /api/admin/verification/students?
-  // No — that's admin-only. Until the backend exposes a public student-by-email
-  // resolver, we ask for the invitee's user id directly, which the registration
-  // success screen surfaces.
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true);
+  useEffect(() => {
+    if (!open) {
+      setRegistrationNo('');
+      setBusyId('');
+    }
+  }, [open]);
+
+  const lookup = useApi(
+    () => registrationNo.trim()
+      ? api.get('/api/teams/explore/members', { query: { search: registrationNo.trim() } })
+      : Promise.resolve({ users: [] }),
+    [registrationNo],
+    { refetchOnFocus: false },
+  );
+
+  const candidates = useMemo(() => {
+    const needle = registrationNo.trim().toLowerCase();
+    if (!needle) return [];
+    const users = lookup.data?.users ?? [];
+    const exact = users.filter((user) => (user.registrationNo ?? '').toLowerCase() === needle);
+    if (exact.length) return exact;
+    return users.filter((user) => (user.registrationNo ?? '').toLowerCase().includes(needle));
+  }, [lookup.data, registrationNo]);
+
+  const sendInvite = async (inviteeId) => {
+    setBusyId(inviteeId);
     try {
-      await api.post(`/api/teams/${teamId}/invites`, { inviteeId: email.trim() });
+      await api.post(`/api/teams/${teamId}/invites`, { inviteeId });
       toast.success('Invite sent.');
       onSent?.();
       onClose();
-      setEmail('');
-    } catch (err) { toast.error(err.message); }
-    finally { setBusy(false); }
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setBusyId('');
+    }
   };
 
   return (
     <Modal open={open} onClose={onClose} title="Invite a member" size="sm">
-      <form onSubmit={submit} className="space-y-4">
-        <FormField label="Invitee user ID" required hint="Paste the user's profile ID. They can find it on their dashboard.">
-          <input className="input-glass" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="cuid…" />
+      <div className="space-y-4">
+        <FormField label="Registration ID" required hint="Search by registration number to find the matching candidate.">
+          <div className="relative">
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-dim" />
+            <input
+              className="input-glass pl-9"
+              required
+              value={registrationNo}
+              onChange={(e) => setRegistrationNo(e.target.value)}
+              placeholder="Registration number..."
+            />
+          </div>
         </FormField>
-        <div className="flex justify-end gap-2">
-          <button type="button" className="ghost-button" onClick={onClose}>Cancel</button>
-          <button type="submit" disabled={busy} className="glow-button inline-flex items-center gap-2">
-            {busy ? <Spinner size={14} /> : <UserPlus size={14} />}
-            {busy ? 'Sending…' : 'Send invite'}
-          </button>
+
+        {!registrationNo.trim() && (
+          <Empty
+            icon={Search}
+            title="Search by registration ID"
+            description="Enter a registration number and the matching candidate will appear here."
+            className="rounded-[4px] border border-border-dim bg-bg-void/40 px-4 py-8"
+          />
+        )}
+
+        {registrationNo.trim() && lookup.loading && <CardSkeleton rows={1} />}
+
+        {registrationNo.trim() && !lookup.loading && candidates.length === 0 && (
+          <Empty
+            icon={Users}
+            title="No matching candidate"
+            description="No student matched that registration number."
+            className="rounded-[4px] border border-border-dim bg-bg-void/40 px-4 py-8"
+          />
+        )}
+
+        <div className="space-y-3">
+          {candidates.map((candidate) => {
+            const blockedReason = candidate.membership?.team
+              ? `${candidate.fullName} is already in ${candidate.membership.team.name}.`
+              : candidate.verificationStatus !== 'VERIFIED'
+                ? 'This student must be verified before they can be invited.'
+                : null;
+
+            return (
+              <article key={candidate.id} className="glass-card flat space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-sans text-[14px] font-bold text-text-primary">{candidate.fullName}</div>
+                    <div className="font-mono text-[11px] text-text-secondary">{candidate.email}</div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Badge tone="cyan">{candidate.domain?.name ?? 'No domain'}</Badge>
+                    {blockedReason && <Badge tone="dim">Unavailable</Badge>}
+                  </div>
+                </div>
+
+                <div className="font-mono text-[11px] text-text-secondary">
+                  Reg #: {candidate.registrationNo ?? '-'}
+                  {candidate.institution?.name ? ` · ${candidate.institution.name}` : ''}
+                </div>
+
+                {blockedReason && (
+                  <div className="font-mono text-[11px] text-text-dim">{blockedReason}</div>
+                )}
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    className="glow-button inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={Boolean(blockedReason) || busyId === candidate.id}
+                    onClick={() => sendInvite(candidate.id)}
+                  >
+                    {busyId === candidate.id ? <Spinner size={14} /> : <UserPlus size={14} />}
+                    {busyId === candidate.id ? 'Sending...' : 'Send invite'}
+                  </button>
+                </div>
+              </article>
+            );
+          })}
         </div>
-      </form>
+
+        <div className="flex justify-end">
+          <button type="button" className="ghost-button" onClick={onClose}>Close</button>
+        </div>
+      </div>
     </Modal>
   );
 };
