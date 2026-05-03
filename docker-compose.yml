@@ -29,7 +29,7 @@ services:
       ACCESS_TOKEN_SECRET: vortex-access-secret-2026-please-rotate-32chars-min
       ACCESS_TOKEN_EXPIRY: 2h
       BCRYPT_ROUNDS: 12
-      CORS_ORIGIN: http://localhost:80,http://localhost:5173
+      CORS_ORIGIN: http://localhost,http://localhost:80,http://localhost:5173,http://127.0.0.1
       ADMIN_SEED_EMAIL: admin@vortex.local
       ADMIN_SEED_PASSWORD: admin1234
       JURY_SEED_PASSWORD: jury1234
