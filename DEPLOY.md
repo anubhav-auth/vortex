@@ -1,538 +1,237 @@
-# Deploying Vortex to Production
+# Deploying Vortex on a $0/month Free Tier
 
 A complete, hand-held guide to taking Vortex from "works on my laptop"
-to "live on the internet at your own domain." Written for someone who
-has never deployed a full-stack app before.
+to "live on the internet at your own domain" — using only free-forever
+services. Written for someone who has never deployed a full-stack app
+before.
 
 You will:
 
-1. Buy a server (~$6/month) and a domain (~$12/year).
-2. Set up a managed Postgres database.
-3. Install Docker on the server.
-4. Configure environment secrets.
-5. Run the app behind a reverse proxy with HTTPS.
-6. Set up automated backups, log monitoring, and updates.
+1. Sign up for five free services (no surprise bills).
+2. Set up a managed Postgres database, free.
+3. Deploy the backend on a free always-on Node host.
+4. Deploy the frontend on a free static host with a global CDN.
+5. (Optional) Buy a domain for ~$10/year.
+6. Connect real transactional email, free.
+7. Set up uptime monitoring, free.
 
-Estimated time: **2-3 hours** the first time, **15 minutes** for
-updates after that.
+**Total recurring cost: $0/month.** Add ~$10/year if you want a custom
+domain (otherwise everything works on the providers' free subdomains).
+
+Estimated time the first deploy: **2-3 hours**. Updates after that:
+**5 minutes** (`git push` → done).
 
 ---
 
 ## Table of Contents
 
-1. [Mental model — what you're building](#1-mental-model--what-youre-building)
-2. [Prerequisites](#2-prerequisites)
-3. [Buy a server](#3-buy-a-server)
-4. [Buy a domain & point it](#4-buy-a-domain--point-it)
-5. [First login + basic server hardening](#5-first-login--basic-server-hardening)
-6. [Install Docker](#6-install-docker)
-7. [Set up your production database](#7-set-up-your-production-database)
-8. [Get the code onto the server](#8-get-the-code-onto-the-server)
-9. [Generate strong secrets](#9-generate-strong-secrets)
-10. [Production docker-compose file](#10-production-docker-compose-file)
-11. [Caddy reverse proxy + automatic HTTPS](#11-caddy-reverse-proxy--automatic-https)
-12. [First boot + initial seed](#12-first-boot--initial-seed)
-13. [Connect a real email provider](#13-connect-a-real-email-provider)
-14. [Backups](#14-backups)
-15. [Monitoring & logs](#15-monitoring--logs)
-16. [Deploying updates](#16-deploying-updates)
-17. [Common production problems](#17-common-production-problems)
-18. [Cost summary](#18-cost-summary)
+1. [Why this stack](#1-why-this-stack)
+2. [What you'll need before starting](#2-what-youll-need-before-starting)
+3. [Mental model](#3-mental-model)
+4. [Step 1 — Push your code to GitHub](#4-step-1--push-your-code-to-github)
+5. [Step 2 — Free PostgreSQL on Neon](#5-step-2--free-postgresql-on-neon)
+6. [Step 3 — Free email on Resend](#6-step-3--free-email-on-resend)
+7. [Step 4 — Wire Resend into the backend](#7-step-4--wire-resend-into-the-backend)
+8. [Step 5 — Deploy the backend on Koyeb](#8-step-5--deploy-the-backend-on-koyeb)
+9. [Step 6 — Deploy the frontend on Cloudflare Pages](#9-step-6--deploy-the-frontend-on-cloudflare-pages)
+10. [Step 7 — Initial database seed](#10-step-7--initial-database-seed)
+11. [Step 8 — (Optional) Custom domain](#11-step-8--optional-custom-domain)
+12. [Step 9 — Free uptime monitoring](#12-step-9--free-uptime-monitoring)
+13. [Deploying updates](#13-deploying-updates)
+14. [Free-tier limits & when you'll outgrow them](#14-free-tier-limits--when-youll-outgrow-them)
+15. [Common production problems](#15-common-production-problems)
+16. [Auto-bill safety checklist](#16-auto-bill-safety-checklist)
 
 ---
 
-## 1. Mental model — what you're building
+## 1. Why this stack
+
+The "always-on free Node host" market shrank a lot in 2024-2025. Cyclic
+shut down. Glitch killed app hosting. Fly.io removed its permanent
+free tier. Railway is trial-credits only. **Render free** still exists
+but spins down after 15 minutes of inactivity (cold starts ~30-60s,
+which kills WebSockets).
+
+The combination below is the one that's still genuinely free in early
+2026 *and* supports persistent WebSocket connections (which Vortex's
+real-time broadcasts and toasts depend on):
+
+| Layer | Service | Why this one |
+|---|---|---|
+| Backend | **Koyeb** | Truly always-on free instance, supports websockets |
+| Frontend | **Cloudflare Pages** | Unlimited bandwidth, built-in CDN |
+| Database | **Neon** | 0.5 GB Postgres, scale-to-zero (~500 ms wake) |
+| Email | **Resend** | 3,000 emails/month, no credit card |
+| Monitoring | **UptimeRobot** | 50 monitors, 5-min checks |
+| Domain | (optional) Cloudflare Registrar | At-cost ~$10/yr |
+
+Only Koyeb asks for a credit card (verification only — they will not
+auto-charge unless you upgrade beyond the single free instance).
+
+---
+
+## 2. What you'll need before starting
+
+On your local machine:
+
+- **Git** — <https://git-scm.com/downloads>
+- A **GitHub account** — <https://github.com>
+- A web browser — for signing up to the services below
+- The **Vortex repo cloned locally** (you already have this)
+
+That's it. No Docker required for production deploys — Koyeb and
+Cloudflare Pages build from your GitHub repo automatically.
+
+---
+
+## 3. Mental model
 
 ```
-                 ┌──────────────────────────────────────────┐
-   YOUR DOMAIN   │         vortex.yourdomain.com            │
-   (DNS A rec)   │                  │                       │
-                 │                  ▼                       │
-                 │   ┌──────────────────────────────┐       │
-                 │   │  Caddy (reverse proxy + TLS) │       │
-                 │   │  ports 80 + 443              │       │
-                 │   └────────────┬─────────────────┘       │
-                 │                │                         │
-                 │     ┌──────────┴───────────┐             │
-                 │     ▼                      ▼             │
-                 │ frontend (nginx)     backend (express)   │
-                 │ port 80 internal     port 3001 internal  │
-                 │     │                      │             │
-                 │     └──────────┬───────────┘             │
-                 │                ▼                         │
-                 │      managed Postgres (over TLS,         │
-                 │      hosted by a cloud provider)         │
-                 └──────────────────────────────────────────┘
-                              ONE LINUX VM
+                   GITHUB REPO (you push code here)
+                            │
+            ┌───────────────┴───────────────┐
+            ▼                               ▼
+   ┌────────────────┐              ┌──────────────────┐
+   │   KOYEB        │              │ CLOUDFLARE PAGES │
+   │   backend +    │              │ frontend (static │
+   │   socket.io    │              │ build of /dist)  │
+   │   always-on    │              │ global CDN       │
+   └────────┬───────┘              └────────┬─────────┘
+            │                               │
+            │                               │
+            │   user's browser hits         │
+            │   Cloudflare → calls          │
+            │   Koyeb's API URL ────────────┘
+            ▼
+   ┌────────────────┐         ┌──────────────────┐
+   │   NEON         │         │   RESEND         │
+   │   PostgreSQL   │         │   transactional  │
+   │   (free 0.5GB) │         │   email          │
+   └────────────────┘         └──────────────────┘
 ```
 
-Three pieces:
-
-- **A domain** so users have a memorable URL (`vortex.yourdomain.com`).
-- **A Linux server** running Docker, hosting frontend + backend.
-- **A managed database** somewhere safe (Neon, Supabase, AWS RDS, etc.) —
-  *not* on the same box, so backups + uptime are someone else's problem.
-
-In front of everything sits **Caddy**, a tiny reverse proxy that
-auto-fetches HTTPS certificates from Let's Encrypt for you. No
-certificate-renewal scripts, no nginx config tuning. It just works.
+Three deploy targets, each with a separate signup. They talk to each
+other over the public internet via TLS-secured connections.
 
 ---
 
-## 2. Prerequisites
+## 4. Step 1 — Push your code to GitHub
 
-You need accounts at:
+Skip this section if your code is already on GitHub.
 
-- A **VM provider** for the server. Recommended: DigitalOcean, Hetzner,
-  Linode, or AWS Lightsail. Pick the one with a region near your users.
-  Anything offering "Ubuntu 24.04 LTS" + SSH access works.
-- A **domain registrar**. Recommended: Namecheap, Porkbun, or Cloudflare
-  Registrar (cheapest at-cost pricing). $10-15/year for a `.com`.
-- A **managed Postgres provider**. Recommended for free tier: Neon
-  (<https://neon.tech>) or Supabase (<https://supabase.com>). Both give
-  you a free Postgres with daily backups.
+If your local repo has no remote yet, or it points at a fork you don't
+own:
 
-Tools on your local machine:
-
-- A terminal (PowerShell on Windows, Terminal on macOS / Linux).
-- An SSH key. If you've never created one:
-
-  ```bash
-  # macOS / Linux / Git Bash on Windows
-  ssh-keygen -t ed25519 -C "you@yourdomain.com"
-  # Press Enter through all prompts. Creates ~/.ssh/id_ed25519 + id_ed25519.pub
-  ```
-
-  The `.pub` file (the *public* half) is what you'll paste into the VM
-  provider so you can log in without a password.
-
----
-
-## 3. Buy a server
-
-Walking through DigitalOcean as the example. Other providers are nearly
-identical.
-
-1. Sign up at <https://digitalocean.com>.
-2. **Create → Droplets**.
-3. Image: **Ubuntu 24.04 (LTS) x64**.
-4. Plan: **Basic** → **Regular SSD** → **$6/month** (1 GB RAM, 1 vCPU,
-   25 GB SSD). This is enough for hundreds of users. Bump to $12/mo if
-   you expect a thousand+ concurrent.
-5. Region: closest to your users.
-6. Authentication: **SSH Key** → "Add new SSH Key" → paste the contents
-   of `~/.ssh/id_ed25519.pub`.
-7. Hostname: `vortex` (anything you like).
-8. **Create Droplet**.
-
-After ~30 seconds you get an **IPv4 address** like `134.209.180.45`.
-Note it down — that's your server's address.
-
-> **Why $6 and not free-tier?** Free-tier providers (AWS Free Tier,
-> Oracle Cloud Free, Google Cloud) work but are notoriously hard to
-> set up correctly the first time and have surprise-bill risk. $6/mo
-> is the cheapest sane option.
-
----
-
-## 4. Buy a domain & point it
-
-1. At your registrar, search for and buy `yourdomain.com` (or whatever).
-   Pay for at least 1 year, ~$10-15.
-2. After purchase, find **DNS settings** / **DNS records**.
-3. Add an **A record**:
-
-   | Type | Host / Name | Value | TTL |
-   |---|---|---|---|
-   | A | `@` (or empty / `yourdomain.com`) | your droplet IP | 300 |
-   | A | `www` | your droplet IP | 300 |
-
-   Or, if you want a subdomain:
-
-   | Type | Host | Value | TTL |
-   |---|---|---|---|
-   | A | `vortex` | your droplet IP | 300 |
-
-   That makes `vortex.yourdomain.com` point to your server.
-
-4. DNS takes 1-30 minutes to propagate. Verify:
+1. Go to <https://github.com/new>.
+2. Create a **new private repository** named `vortex` (or anything).
+   Don't tick any of the "initialize with README/gitignore/license"
+   boxes — your local repo already has those.
+3. GitHub will show "Push an existing repository" instructions. Run
+   the commands locally, in your project root:
 
    ```bash
-   # Replace with your real domain
-   nslookup vortex.yourdomain.com
+   git remote remove origin                              # if there's an old one
+   git remote add origin https://github.com/YOU/vortex.git
+   git branch -M main
+   git push -u origin main
    ```
 
-   Should return your droplet IP. If not, wait longer or double-check
-   the DNS record.
+4. Reload the GitHub page — you should see all your files.
 
-For the rest of this guide I'll assume you're using
-**`vortex.yourdomain.com`**. Substitute your real domain everywhere.
-
----
-
-## 5. First login + basic server hardening
-
-From your local terminal:
-
-```bash
-ssh root@134.209.180.45        # your droplet IP
-```
-
-Accept the SSH fingerprint the first time. You should land at
-`root@vortex:~#`.
-
-> If you get "Permission denied (publickey)" you uploaded the wrong key.
-> Recreate the droplet and re-paste the *public* key (the one ending in
-> `.pub`).
-
-Update the system and create a non-root user — running everything as
-root is a footgun:
-
-```bash
-apt update && apt upgrade -y
-adduser deploy                 # answer prompts. Set a strong password.
-usermod -aG sudo deploy        # give deploy passwordless-with-sudo
-rsync --archive --chown=deploy:deploy ~/.ssh /home/deploy
-```
-
-Test you can log in as the new user from a *new* terminal window:
-
-```bash
-ssh deploy@134.209.180.45
-```
-
-If it works, lock down root login. Back on the server:
-
-```bash
-sudo nano /etc/ssh/sshd_config
-# find this line and change Yes -> No:
-#   PermitRootLogin no
-# Save with Ctrl+O, Enter, then Ctrl+X to exit nano.
-sudo systemctl restart ssh
-```
-
-Set up a basic firewall:
-
-```bash
-sudo ufw allow OpenSSH
-sudo ufw allow 80/tcp          # HTTP (Caddy will use this for HTTPS challenge)
-sudo ufw allow 443/tcp         # HTTPS
-sudo ufw enable                # answer 'y'
-sudo ufw status                # verify the three rules are listed
-```
-
-You're now logged in as `deploy`, root login is disabled, only ports
-22/80/443 are open. From here on, **always log in as `deploy`**.
+**Why GitHub specifically?** Both Koyeb and Cloudflare Pages connect
+directly to a GitHub repo and auto-deploy on every push. GitLab and
+Bitbucket also work but require slightly different setup paths.
 
 ---
 
-## 6. Install Docker
+## 5. Step 2 — Free PostgreSQL on Neon
 
-```bash
-# Install Docker's official package (the Ubuntu apt one is outdated)
-curl -fsSL https://get.docker.com | sudo sh
+Neon gives you 0.5 GB of Postgres storage with automatic backups, no
+credit card required.
 
-# Let `deploy` use docker without sudo
-sudo usermod -aG docker deploy
+1. Sign up at <https://neon.tech> (use "Sign in with GitHub").
+2. After signup you'll be prompted to create a project.
+   - **Project name:** `vortex`
+   - **Postgres version:** the latest (16 or 17)
+   - **Region:** pick one close to where Koyeb's free region is —
+     **Frankfurt** or **Washington DC** are the Koyeb free options
+     (they're listed on the Koyeb signup page in step 5)
+3. Click **Create project**.
 
-# Verify (after logging out and back in for the group to take effect)
-exit
-ssh deploy@134.209.180.45
-docker --version
-docker compose version
-docker run --rm hello-world    # should pull and print 'Hello from Docker!'
-```
+You're now in the Neon dashboard. Find the **connection string**:
 
-If `hello-world` works, Docker is good to go.
+- Top of the dashboard → **Connection Details** card
+- Make sure the dropdowns say **Pooled connection** and **Node.js**
+- Copy the value. It looks like:
 
----
+  ```
+  postgresql://vortex_owner:abc123XYZ@ep-cool-cloud-12345-pooler.us-east-2.aws.neon.tech/vortex?sslmode=require
+  ```
 
-## 7. Set up your production database
+**Save this somewhere safe.** Call it `DATABASE_URL` in your notes —
+you'll paste it into Koyeb in step 5.
 
-Don't run Postgres on the same box as the app. Use a managed provider
-so backups + maintenance are handled for you.
-
-### Option A: Neon (recommended for getting started — free tier)
-
-1. Sign up at <https://neon.tech>.
-2. Create a project, name it `vortex`. Region near your droplet.
-3. Once created, **Connection Details** → copy the connection string.
-   It looks like:
-
-   ```
-   postgresql://vortex_owner:abc123XYZ@ep-cool-cloud-12345.us-east-2.aws.neon.tech/vortex?sslmode=require
-   ```
-
-4. **Save it somewhere safe** — you'll paste it into the server in §10.
-
-### Option B: Supabase (also free)
-
-Same idea — sign up, create project, find the connection string under
-**Settings → Database → Connection string → URI**.
-
-### Option C: Self-hosted Postgres (not recommended for first deploy)
-
-If you really want to run Postgres on the same VM, add it as a service
-in `docker-compose.yml` and use a named volume. You're now responsible
-for backups, upgrades, and uptime. For everything that follows, just
-use `postgresql://...@db:5432/vortex_db?schema=public` as your
-`DATABASE_URL`.
-
-> **Whatever you pick:** make sure the connection string includes
-> `?sslmode=require` (Neon and Supabase enforce this; failing this
-> step gives you a confusing connection error).
+> The `?sslmode=require` at the end is mandatory. Neon rejects
+> non-TLS connections. If you accidentally drop it, the backend will
+> fail to start with a confusing error.
 
 ---
 
-## 8. Get the code onto the server
+## 6. Step 3 — Free email on Resend
 
-On the server (logged in as `deploy`):
+Resend gives you 3,000 emails/month, no card needed.
 
-```bash
-# Install git
-sudo apt install -y git
+1. Sign up at <https://resend.com> (Sign in with GitHub is fine).
+2. After signup, **Domains** → **Add Domain**. You have two paths:
 
-# Clone the repo
-cd ~
-git clone https://github.com/Bhuvilol/TechExpress.git vortex
-cd vortex
+   ### Path A — You bought a domain (recommended for production)
 
-# Verify
-ls
-# Should show: backend  frontend  docker-compose.yml  README.md  ...
-```
+   - Add your domain (e.g. `yourdomain.com`).
+   - Resend shows 3-4 DNS records (TXT, MX, CNAME). Add them at your
+     domain registrar's DNS panel.
+   - Click **Verify**. Takes 1-30 minutes for DNS to propagate.
 
-> **Forking the repo first** is recommended so you can keep your
-> production tweaks (compose file, secrets references, custom theme)
-> in version control. Replace the URL above with your fork's URL.
+   ### Path B — You don't have a domain yet
 
----
+   - Skip this for now. Resend lets you send from `onboarding@resend.dev`
+     by default (rate-limited to your own email). It's enough to test
+     the verification flow but not for real users.
+   - Come back here after [Step 8](#11-step-8--optional-custom-domain).
 
-## 9. Generate strong secrets
-
-You need three secrets. Generate each with `openssl` on the server:
-
-```bash
-# JWT signing secret (must be 32+ chars; use 64 to be safe)
-openssl rand -base64 64
-# example output: 7p9LJxD2... (long random string)
-
-# Admin password
-openssl rand -base64 18
-# example: aB3xYz...
-
-# Jury default password (you'll rotate per-jury later)
-openssl rand -base64 18
-```
-
-Save all three in a password manager. You'll paste them into env vars
-in the next step.
-
-> **Do not commit these to git.** That's why we use a separate
-> `.env.production` file that's gitignored.
+3. **API Keys** → **Create API Key** → copy the key (`re_…`). **Save
+   it as `RESEND_API_KEY` in your notes.** You only see it once.
 
 ---
 
-## 10. Production docker-compose file
+## 7. Step 4 — Wire Resend into the backend
 
-The repo's `docker-compose.yml` is tuned for local dev. Make a
-production-specific override file.
+The current backend just logs emails to stdout (the dev mail stub). For
+production we need real delivery. This is a small code change.
 
-On the server, in `~/vortex`:
-
-```bash
-nano docker-compose.prod.yml
-```
-
-Paste this, **substituting your real values** for the four `CHANGE_ME` lines:
-
-```yaml
-services:
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    restart: always
-    environment:
-      NODE_ENV: production
-      PORT: 3001
-      LOG_LEVEL: info
-      # Your managed Postgres URL from §7. Must include sslmode=require.
-      DATABASE_URL: "CHANGE_ME_POSTGRES_URL"
-      # JWT secret from §9. 32+ chars.
-      ACCESS_TOKEN_SECRET: "CHANGE_ME_JWT_SECRET"
-      ACCESS_TOKEN_EXPIRY: "8h"
-      BCRYPT_ROUNDS: 12
-      # Only your real frontend origin — no localhost in prod.
-      CORS_ORIGIN: "https://vortex.yourdomain.com"
-      ADMIN_SEED_EMAIL: "you@yourdomain.com"
-      ADMIN_SEED_PASSWORD: "CHANGE_ME_ADMIN_PASSWORD"
-      JURY_SEED_PASSWORD: "CHANGE_ME_JURY_PASSWORD"
-    expose:
-      - "3001"
-    # No `ports:` — backend is only reached through the frontend's nginx
-    # proxy, which itself sits behind Caddy. Internal only.
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    restart: always
-    expose:
-      - "80"
-    depends_on:
-      - backend
-
-  caddy:
-    image: caddy:2-alpine
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - frontend
-
-volumes:
-  caddy_data:
-  caddy_config:
-```
-
-> **Note:** the `db` service from the dev compose is gone — we're using
-> managed Postgres. The `ports:` map for backend is gone too — only
-> Caddy talks to the world. Caddy has the only `80:80` / `443:443`
-> bindings.
-
----
-
-## 11. Caddy reverse proxy + automatic HTTPS
-
-Caddy reads a tiny config file and handles HTTPS automatically. Create it:
+In your local repo:
 
 ```bash
-nano Caddyfile
+cd backend
+npm install resend
 ```
 
-Paste, replacing the domain:
-
-```
-vortex.yourdomain.com {
-  encode gzip
-
-  # Everything goes through the frontend container's nginx, which
-  # proxies /api/* and /socket.io/* to the backend on the docker network.
-  reverse_proxy frontend:80
-
-  # Sensible defaults
-  header {
-    Strict-Transport-Security "max-age=31536000; includeSubDomains"
-    X-Content-Type-Options "nosniff"
-    Referrer-Policy "strict-origin-when-cross-origin"
-  }
-
-  log {
-    output file /data/access.log {
-      roll_size 10MB
-      roll_keep 5
-    }
-  }
-}
-```
-
-That's it. Caddy will:
-
-- Listen on 80 + 443.
-- Auto-fetch a Let's Encrypt cert for `vortex.yourdomain.com` on first
-  request, then renew it forever.
-- Force HTTP → HTTPS redirect.
-- Enable HTTP/2 + gzip.
-
-> Caddy needs to reach Let's Encrypt over the public internet on port
-> 80 to validate ownership. If your DNS A record from §4 hasn't fully
-> propagated yet, the first cert fetch will fail. Wait a few minutes
-> and restart Caddy.
-
----
-
-## 12. First boot + initial seed
-
-Build and start everything:
-
-```bash
-cd ~/vortex
-docker compose -f docker-compose.prod.yml up -d --build
-```
-
-The first build takes ~5 minutes. Watch progress:
-
-```bash
-docker compose -f docker-compose.prod.yml logs -f
-```
-
-Once you see `server started` from backend and `serving HTTPS on :443`
-from caddy, hit Ctrl+C to stop tailing.
-
-Apply the database schema (one-time):
-
-```bash
-docker compose -f docker-compose.prod.yml exec backend npx prisma db push
-```
-
-Seed admin + juries + rules + sample registry:
-
-```bash
-docker compose -f docker-compose.prod.yml exec backend npm run db:seed
-```
-
-Open <https://vortex.yourdomain.com> in your browser. You should see the
-landing page with a valid HTTPS padlock. Sign in with the admin email
-and password you set in §10.
-
-🎉 **You're live.**
-
----
-
-## 13. Connect a real email provider
-
-The backend currently logs verification passwords to stdout instead of
-emailing them. In production you need real email so users actually
-receive their 6-digit codes.
-
-### Pick a provider
-
-| Provider | Free tier | Why |
-|---|---|---|
-| **Resend** | 3000/mo | Cleanest API, dev-friendly |
-| **Postmark** | 100/mo trial then paid | Best deliverability for transactional |
-| **AWS SES** | 62k/mo if sent from EC2 | Cheap at scale |
-| **SendGrid** | 100/day free | Largest, ugly dashboard |
-
-I'll use **Resend** as the example.
-
-1. Sign up at <https://resend.com>.
-2. Add your domain → follow their DNS instructions (3-4 records you'll
-   add at your registrar) → wait for verification.
-3. Create an API key from the dashboard.
-
-### Wire it into the backend
-
-Edit `backend/src/utils/mail.js`. The existing `sendMail` function logs
-to stdout — replace it:
+Open `backend/src/utils/mail.js` and **replace `sendMail`** with:
 
 ```js
 import { Resend } from 'resend';
 import { logger } from './logger.js';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM = process.env.MAIL_FROM ?? 'Vortex <noreply@yourdomain.com>';
+const resend = process.env.RESEND_API_KEY
+  ? new Resend(process.env.RESEND_API_KEY)
+  : null;
+
+const FROM = process.env.MAIL_FROM ?? 'Vortex <onboarding@resend.dev>';
 
 export const sendMail = async ({ to, subject, text }) => {
-  if (!process.env.RESEND_API_KEY) {
-    logger.warn('mail.skipped — no RESEND_API_KEY set', { to, subject });
-    return { delivered: false };
+  // Dev / mis-configured: log instead of sending so the system still works.
+  if (!resend) {
+    logger.warn('mail.skipped — no RESEND_API_KEY', { to, subject, body: text });
+    return { delivered: false, reason: 'no-key' };
   }
   try {
     const result = await resend.emails.send({ from: FROM, to, subject, text });
@@ -543,235 +242,415 @@ export const sendMail = async ({ to, subject, text }) => {
     return { delivered: false, error: err.message };
   }
 };
-// keep the existing sendVerificationApprovedMail / sendVerificationRejectedMail
-// / sendAccessRevokedMail wrappers — they call sendMail under the hood.
 ```
 
-Add `resend` to backend deps:
+**Keep the `sendVerificationApprovedMail`, `sendVerificationRejectedMail`,
+and `sendAccessRevokedMail` exports below it untouched** — they call
+`sendMail` under the hood, so they automatically use Resend now.
+
+Commit and push:
 
 ```bash
-# locally, then commit + push:
-cd backend
-npm install resend
-git add package.json package-lock.json src/utils/mail.js
-git commit -m "feat(mail): swap stub for real Resend integration"
+cd ..
+git add backend/package.json backend/package-lock.json backend/src/utils/mail.js
+git commit -m "feat(mail): real Resend integration for production"
 git push
 ```
 
-On the server:
+---
 
-```bash
-cd ~/vortex
-git pull
-nano docker-compose.prod.yml
-# Add to backend.environment:
-#   RESEND_API_KEY: "re_abc...your_key"
-#   MAIL_FROM: "Vortex <noreply@yourdomain.com>"
-docker compose -f docker-compose.prod.yml up -d --build backend
-```
+## 8. Step 5 — Deploy the backend on Koyeb
 
-Test by approving a registration and confirming the user receives a real
-email.
+Koyeb gives you one always-on free instance with 512 MB RAM. WebSockets
+work out of the box.
+
+1. Sign up at <https://www.koyeb.com> (Sign in with GitHub).
+2. Koyeb asks for a credit card during signup for verification. **They
+   will not auto-bill** unless you explicitly upgrade past the free
+   tier. (See [§16](#16-auto-bill-safety-checklist) for how to verify.)
+3. **Create Service** → **Web Service** → **GitHub**.
+4. Authorize Koyeb to access your `vortex` repo. Select it.
+5. Configure:
+
+   | Field | Value |
+   |---|---|
+   | **Branch** | `main` |
+   | **Builder** | **Dockerfile** |
+   | **Dockerfile location** | `backend/Dockerfile` |
+   | **Build context** | `backend` (NOT the repo root) |
+   | **Region** | Frankfurt OR Washington DC (whichever matches your Neon region) |
+   | **Instance type** | **Free** (Eco / 512 MB) |
+   | **Service name** | `vortex-backend` |
+
+6. Scroll to **Ports**:
+   - Port `3001` (HTTP) — the backend listens on this.
+   - Make sure it's **public**.
+
+7. Scroll to **Environment variables** → add each of these. Copy
+   values from your notes (Neon URL, Resend key) and generate fresh
+   secrets where indicated:
+
+   | Name | Value |
+   |---|---|
+   | `NODE_ENV` | `production` |
+   | `PORT` | `3001` |
+   | `LOG_LEVEL` | `info` |
+   | `DATABASE_URL` | *(your Neon connection string from step 2)* |
+   | `ACCESS_TOKEN_SECRET` | *(generate: see below)* |
+   | `ACCESS_TOKEN_EXPIRY` | `8h` |
+   | `BCRYPT_ROUNDS` | `12` |
+   | `CORS_ORIGIN` | *(leave blank for now — we'll fill after step 6)* |
+   | `ADMIN_SEED_EMAIL` | `you@yourdomain.com` (your real email) |
+   | `ADMIN_SEED_PASSWORD` | *(generate)* |
+   | `JURY_SEED_PASSWORD` | *(generate)* |
+   | `RESEND_API_KEY` | *(your `re_…` key from step 3)* |
+   | `MAIL_FROM` | `Vortex <onboarding@resend.dev>` (or your verified Resend sender) |
+
+   ### Generating strong values
+
+   In any terminal:
+
+   ```bash
+   # JWT secret — must be 32+ chars, use 64 for extra safety
+   openssl rand -base64 64
+
+   # Admin password
+   openssl rand -base64 18
+
+   # Jury default password
+   openssl rand -base64 18
+   ```
+
+   Don't have `openssl`? Use <https://it-tools.tech/token-generator>
+   (set length 64, all char types).
+
+   **Save all three** in a password manager.
+
+8. Click **Deploy**. Koyeb pulls your repo, builds the Dockerfile, and
+   starts the service. First build takes ~5 minutes — watch the logs.
+
+9. When the service is **Healthy**, copy its public URL from the top of
+   the page. It looks like:
+
+   ```
+   https://vortex-backend-yourname.koyeb.app
+   ```
+
+   **Save this** — you'll need it for the frontend in step 6, and
+   we'll come back to set `CORS_ORIGIN` after step 6.
+
+10. Verify it's alive:
+
+    ```bash
+    curl https://vortex-backend-yourname.koyeb.app/api/health
+    # → {"status":"ok"}
+    ```
 
 ---
 
-## 14. Backups
+## 9. Step 6 — Deploy the frontend on Cloudflare Pages
 
-If you used Neon or Supabase, **you already have automatic daily backups**
-included free. Visit your provider's dashboard to verify retention period
-and download a backup once to make sure the restore path works.
+Cloudflare Pages gives you unlimited bandwidth, global CDN, and free
+HTTPS. The frontend talks to your Koyeb backend by URL.
 
-For self-hosted Postgres, set up a daily cron job:
+1. Sign up at <https://dash.cloudflare.com> (free account, no card).
+2. Top-left dropdown → **Workers & Pages** → **Create** → **Pages** →
+   **Connect to Git**.
+3. Authorize Cloudflare to access your `vortex` repo. Select it.
+4. **Set up builds and deployments**:
 
-```bash
-# Open the crontab editor
-crontab -e
+   | Field | Value |
+   |---|---|
+   | **Project name** | `vortex` |
+   | **Production branch** | `main` |
+   | **Framework preset** | **Vite** |
+   | **Build command** | `npm install && npm run build` |
+   | **Build output directory** | `dist` |
+   | **Root directory** | `frontend` ← **important** |
 
-# Add this line (runs daily at 03:00 server time)
-0 3 * * * docker compose -f /home/deploy/vortex/docker-compose.prod.yml exec -T db pg_dump -U vortex_user vortex_db | gzip > /home/deploy/backups/vortex-$(date +\%F).sql.gz
+5. **Environment variables** (Production scope) → add:
 
-# Make sure the backup folder exists
-mkdir -p /home/deploy/backups
-```
+   | Name | Value |
+   |---|---|
+   | `VITE_API_URL` | *(your Koyeb URL from step 5, no trailing slash)* |
 
-Then offsite the backup files (e.g. `rclone copy` to S3 / Backblaze)
-weekly. **A backup that lives only on the server it backs up is not a
-backup.**
+   This tells the frontend where to find the backend. Without it the
+   bundle uses relative URLs and 404s in production.
 
----
+6. Click **Save and Deploy**. Cloudflare builds the SPA and publishes
+   it. First deploy takes ~2 minutes.
 
-## 15. Monitoring & logs
+7. When done, you get a URL like:
 
-### Logs
+   ```
+   https://vortex-xyz.pages.dev
+   ```
 
-```bash
-# Tail everything
-docker compose -f docker-compose.prod.yml logs -f
+   **Save this** — you need it for the next step.
 
-# Just one service
-docker compose -f docker-compose.prod.yml logs -f backend
+8. **Now go back to Koyeb** → your `vortex-backend` service →
+   **Settings** → **Environment variables**. Set:
 
-# Last 100 lines, no follow
-docker compose -f docker-compose.prod.yml logs --tail=100 backend
+   ```
+   CORS_ORIGIN = https://vortex-xyz.pages.dev
+   ```
 
-# Caddy access log (HTTP requests)
-docker compose -f docker-compose.prod.yml exec caddy tail -f /data/access.log
-```
+   (Use your actual Pages URL, no trailing slash.) Click **Save**.
+   Koyeb redeploys the backend with the new env (~1 min).
 
-### Health check
-
-The backend exposes `/api/health`. Wire that into an uptime monitor:
-
-- **UptimeRobot** (<https://uptimerobot.com>) — free, 5-minute checks
-- **BetterStack** — free tier, prettier dashboard
-
-Configure it to ping `https://vortex.yourdomain.com/api/health` every
-5 minutes and email/SMS you when it fails.
-
-### Disk usage
-
-Docker can fill the disk over time with old images and build cache:
-
-```bash
-df -h                          # check usage
-docker system prune -a -f      # delete unused images, networks, build cache
-```
-
-Run `prune` monthly or set up a cron.
+9. Open `https://vortex-xyz.pages.dev` in your browser. You should see
+   the Vortex landing page. Click **Sign in** — but you can't yet
+   because there's no admin account. Continue to step 7.
 
 ---
 
-## 16. Deploying updates
+## 10. Step 7 — Initial database seed
 
-When you push code changes, on the server:
+The seed script creates the admin + jury accounts + hackathon rules.
+Run it once, against your Neon database.
 
-```bash
-cd ~/vortex
-git pull
+The simplest path: SSH into the running Koyeb backend and run the seed
+command there.
 
-# Rebuild only what changed
-docker compose -f docker-compose.prod.yml up -d --build backend frontend
+1. In Koyeb, open your `vortex-backend` service → **Console** tab.
+2. Click **Open shell**. You're now inside the container.
+3. Run:
 
-# If the schema changed:
-docker compose -f docker-compose.prod.yml exec backend npx prisma db push
+   ```bash
+   npx prisma db push      # apply schema (one-time)
+   npm run db:seed         # seed admin + juries + rules + sample registry
+   ```
 
-# Tail logs to confirm it came up healthy
-docker compose -f docker-compose.prod.yml logs -f backend
-```
+4. You'll see:
 
-Total downtime: ~10 seconds while the container restarts. For zero
-downtime you'd need a blue/green deploy — out of scope for this guide.
+   ```
+   [seed] start
+   [seed] HackathonRules ready (id=rules)
+   [seed] RoundControl ready (id=round_control)
+   [seed] Institutions: 5 ensured
+   [seed] Domains: 5 ensured
+   [seed] ProblemStatements: 10 ensured
+   [seed] Admin ready (you@yourdomain.com)
+   [seed] Juries: 3 ensured (default password: …)
+   [seed] CollegeRegistry: 8 ensured
+   [seed] done
+   ```
 
-> **Test in a staging environment first** if you have any users. A
-> $6 second droplet with a `staging.yourdomain.com` subdomain doubles
-> your bill but saves you from breaking production.
+5. Type `exit` to leave the shell.
+6. Go to your Pages URL → **Sign in** with the admin email + the
+   `ADMIN_SEED_PASSWORD` you set in step 5.
 
----
+🎉 **You're live, on a $0/month stack.**
 
-## 17. Common production problems
-
-### "This site can't be reached" right after first boot
-
-DNS hasn't propagated yet, or Caddy hasn't fetched the cert yet. Wait 5
-minutes and check Caddy's logs:
-
-```bash
-docker compose -f docker-compose.prod.yml logs caddy
-```
-
-Look for `obtained certificate` (good) or `failed to obtain certificate`
-(usually a DNS issue — verify with `nslookup`).
-
-### 502 Bad Gateway
-
-The backend is down or unreachable from Caddy. Check:
-
-```bash
-docker compose -f docker-compose.prod.yml ps               # is backend running?
-docker compose -f docker-compose.prod.yml logs backend     # any crashes?
-```
-
-Most common cause: bad `DATABASE_URL` or missing `ACCESS_TOKEN_SECRET`
-in the compose file. The backend exits immediately on missing env.
-
-### Backend logs say "User was denied access on the database"
-
-Wrong `DATABASE_URL` — double-check the connection string from your
-managed provider, especially the password (special chars need to be
-URL-encoded).
-
-### CORS errors in the browser console
-
-Check `CORS_ORIGIN` in the compose file. Must match exactly the URL
-shown in the browser address bar — including `https://`, no trailing
-slash. Browsers strip default ports, so `https://example.com:443` won't
-match what the browser sends (`https://example.com`).
-
-### Logs are filling the disk
-
-Limit Docker log size — add to each service in your compose file:
-
-```yaml
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-```
-
-Restart the affected service for it to take effect.
-
-### "Site is suddenly slow"
-
-Most likely the database. Check connection counts in the Neon /
-Supabase dashboard. Free-tier databases have hard limits (Neon: 100
-concurrent). The backend doesn't pool aggressively yet — for >100
-concurrent users, configure PgBouncer or upgrade your DB plan.
+> If the Console option isn't visible on Koyeb's free tier, alternative:
+> install Node 20+ and the `psql` client locally, then run the seed
+> against the Neon URL directly:
+>
+> ```bash
+> cd backend
+> # On Windows PowerShell:
+> $env:DATABASE_URL="postgresql://...@neon.tech/vortex?sslmode=require"
+> # On macOS/Linux:
+> export DATABASE_URL="postgresql://...@neon.tech/vortex?sslmode=require"
+> npx prisma db push
+> npm run db:seed
+> ```
 
 ---
 
-## 18. Cost summary
+## 11. Step 8 — (Optional) Custom domain
 
-For a small-to-medium event (up to ~500 students):
+If you don't care about the URL being `vortex-xyz.pages.dev`, skip this.
 
-| Item | Provider | Monthly |
+If you want `vortex.yourdomain.com`:
+
+1. Buy a domain. **Cloudflare Registrar** is cheapest at-cost
+   (~$10/yr for `.com`, free WHOIS privacy):
+   - In your Cloudflare dashboard → top-right **Add** → **Existing**
+     domain (any) or **Register a new domain** → search and buy.
+2. Once owned, add the domain as a Cloudflare site (it'll auto-detect
+   if registered through Cloudflare).
+3. **Pages project** → **Custom domains** → **Set up a custom domain**
+   → enter `vortex.yourdomain.com` → Cloudflare adds the DNS records
+   automatically. HTTPS cert auto-provisions in ~1 minute.
+4. Update Koyeb env: change `CORS_ORIGIN` from
+   `https://vortex-xyz.pages.dev` to `https://vortex.yourdomain.com`.
+5. (Resend) If you skipped Path A in step 3, do it now: verify your
+   domain in Resend so you can send from `noreply@yourdomain.com` and
+   update `MAIL_FROM` on Koyeb.
+
+Other registrars work too (Porkbun is great), but using Cloudflare end
+to end means one less DNS panel to log into.
+
+---
+
+## 12. Step 9 — Free uptime monitoring
+
+UptimeRobot pings your backend every 5 minutes. If it goes down, you
+get an email.
+
+1. Sign up at <https://uptimerobot.com> (no card).
+2. **+ Add New Monitor**:
+   - **Type:** HTTP(s)
+   - **Friendly Name:** Vortex backend
+   - **URL:** `https://vortex-backend-yourname.koyeb.app/api/health`
+   - **Monitoring Interval:** 5 minutes
+   - **Alert Contacts:** your email (you may need to verify it)
+3. **Create Monitor**.
+
+You can also add the frontend URL as a second monitor — Cloudflare
+Pages basically never goes down but it's nice to know.
+
+---
+
+## 13. Deploying updates
+
+The whole point of git-connected deploys: just push and walk away.
+
+```bash
+# Make changes locally
+git add .
+git commit -m "feat: new thing"
+git push
+
+# Both Koyeb and Cloudflare Pages auto-deploy from main:
+#   - Pages: ~2 min (rebuild + global CDN propagation)
+#   - Koyeb: ~3-5 min (Docker build + restart)
+```
+
+Watch deploy progress in each provider's dashboard. UptimeRobot pings
+during the Koyeb restart will fail for ~30s — expect one alert. To
+avoid notification spam, set the alert threshold to "down for 2+
+checks" in UptimeRobot settings.
+
+### If you change the database schema
+
+```bash
+# After git push, when Koyeb is healthy again:
+# Open Koyeb console for vortex-backend → Open shell
+npx prisma db push
+exit
+```
+
+---
+
+## 14. Free-tier limits & when you'll outgrow them
+
+The numbers below are the **bottleneck-first** view — each is the
+limit you'll hit first when usage grows.
+
+| Service | Free limit | "What that means" |
 |---|---|---|
-| VPS (1 GB / 1 CPU) | DigitalOcean | $6 |
-| Domain | Porkbun (~$12/yr) | ~$1 |
-| Database | Neon free tier | $0 |
-| Email | Resend free tier (3k/mo) | $0 |
-| Uptime monitoring | UptimeRobot free | $0 |
-| Backups | Included with Neon | $0 |
-| **Total** | | **~$7/mo** |
+| **Neon Postgres** | 0.5 GB storage, 100 compute-hrs/mo | ~50,000 users + their full registration data fits. Compute-hours = wall-clock time the DB is "warm" (auto-sleeps after 5 min idle). 100 hrs = ~3.3 hrs/day of active usage. |
+| **Koyeb Web Service** | 512 MB RAM, 0.1 vCPU | Comfortably handles 10-20 concurrent users with WebSockets. CPU is the first thing you'll hit on a sudden traffic spike. |
+| **Cloudflare Pages** | Unlimited bandwidth, 500 builds/mo | The unlimited bandwidth is real. 500 builds = ~16 deploys/day for 30 days. You won't hit this. |
+| **Resend** | 3,000 emails/mo, 100/day | ~3,000 verifications + password reissues per month. Plenty for a 500-person hackathon. |
+| **UptimeRobot** | 50 monitors, 5-min checks | You're using 1-2 of them. |
 
-For a larger event (~5000 users, real load):
+**When to leave free tier**, in order:
 
-| Item | Provider | Monthly |
-|---|---|---|
-| VPS (4 GB / 2 CPU) | DigitalOcean | $24 |
-| Domain | as above | ~$1 |
-| Database (Pro) | Neon Pro | $19 |
-| Email | Resend Pro (50k/mo) | $20 |
-| Uptime monitoring | BetterStack | $0 (free tier) |
-| Offsite backups | Backblaze B2 (~5 GB) | $0.03 |
-| **Total** | | **~$64/mo** |
+1. **>20 concurrent users** with WebSockets → Koyeb $7/mo Nano (1 GB RAM, 0.5 vCPU)
+2. **>3,000 emails/mo** → Resend Pro $20/mo for 50,000
+3. **>0.5 GB DB** → Neon Launch $19/mo for 10 GB
+
+Total to scale to ~5,000 concurrent users: ~$50/mo.
 
 ---
 
-## Where to go from here
+## 15. Common production problems
 
-- **Forking the repo** so you can track production tweaks in git
-- **Setting up CI/CD** (GitHub Actions → SSH → `git pull && docker compose up -d --build`)
-- **Adding a staging environment** so you can test deploys safely
-- **Brand the theme** — change colors in `frontend/src/index.css`
-  (the CSS custom properties at the top), rebuild the frontend container
+### "CORS error" in browser console after first deploy
+
+Check that `CORS_ORIGIN` on Koyeb exactly matches your Pages URL —
+including `https://`, no trailing slash. Browsers strip default ports,
+so `https://example.com:443` won't match `https://example.com`. Most
+common cause: forgot to update CORS after switching to a custom domain.
+
+### Backend deploy fails with "Cannot find module"
+
+You probably set the wrong **Build context** in Koyeb. It must be
+`backend` (not the repo root). The Dockerfile is at `backend/Dockerfile`
+and the build expects `backend/` as the context.
+
+### Frontend builds but shows "Failed to load resource" for /api
+
+`VITE_API_URL` isn't set on Pages. Set it (Settings → Environment
+variables → Production), then trigger a redeploy: **Deployments** →
+top of the list → ⋯ menu → **Retry deployment**.
+
+### "User was denied access on the database"
+
+Wrong `DATABASE_URL`. Re-copy from Neon dashboard. Special characters
+in the password must be URL-encoded (Neon's auto-generated passwords
+are URL-safe so this is rare).
+
+### Backend keeps crashing immediately after start
+
+Almost always a missing required env var. Check Koyeb logs for
+`Invalid environment configuration: { ACCESS_TOKEN_SECRET: ... }`. The
+backend exits with status 1 on any missing required env.
+
+### Neon database keeps "sleeping"
+
+Neon free tier scales to zero after 5 minutes of no DB traffic. The
+first request after sleep takes ~500 ms (warm-up). For a hackathon
+this is invisible. If it bothers you, set UptimeRobot to also ping a
+backend route that hits the database (e.g. `/api/leaderboard` if rules
+let it be public) every 5 min — keeps the DB warm, costs ~30
+compute-hours/mo, well within the 100-hour limit.
+
+### Koyeb shuts the service down with "out of memory"
+
+512 MB is tight. The Vortex backend uses ~150-200 MB at idle, jumping
+to ~300 MB under load. If you hit OOM, the cheapest fix is to ensure
+you're not running tests/migrations in the same container. If it's
+persistent, the $7/mo Nano tier doubles the RAM.
+
+### "Sign in" returns 502 / 503 the very first time
+
+Koyeb's free instance can take ~10s to wake from a deep sleep if there's
+been zero traffic in hours. Refresh once. If it persists, check the
+service is **Healthy** (not just **Running**) in the Koyeb dashboard —
+the health probe hits `/api/health`.
+
+---
+
+## 16. Auto-bill safety checklist
+
+The whole point of this guide is **no surprise bills**. Verify each:
+
+- ✅ **Neon** — no card on file. You cannot be billed.
+- ✅ **Cloudflare Pages** — no card. Cannot be billed.
+- ✅ **Resend** — no card. If you exceed free quota, sends fail (you're
+  not billed for overage).
+- ✅ **UptimeRobot** — no card. Cannot be billed.
+- ⚠️ **Koyeb** — card required for verification. To eliminate auto-bill
+  risk:
+  - **Settings** → **Billing** → confirm no paid plan is active.
+  - **Settings** → **Notifications** → enable usage alerts at $0.01 so
+    you're emailed the second any charge starts to accrue.
+  - You only get billed if you **explicitly** upgrade your service
+    instance type or add a second service.
+- ⚠️ **Cloudflare Registrar** (only if you bought a domain) — auto-renews
+  yearly. Disable in **Domain Registration** → your domain → toggle off
+  auto-renew, or accept the ~$10/yr.
+
+---
+
+## What to do next
+
+- **Brand the theme.** Edit the CSS variables at the top of
+  `frontend/src/index.css` — change `--accent-cyan` and rebuild.
+  Cloudflare Pages auto-deploys the change.
 - **Customise the registration form** in
-  `frontend/src/pages/public/RegistrationPage.jsx`
+  `frontend/src/pages/public/RegistrationPage.jsx`.
+- **Upload your real institution roster** to the Registry from the
+  admin UI — paste a CSV via Admin → Registry → Bulk Upload.
+- **Read [`README.md`](./README.md)** for the local-dev workflow if
+  you want hot-reload while you iterate.
 
 ---
 
 ## License
 
-Project is MIT. Deploy responsibly: rotate secrets, keep the OS patched
-(`sudo apt update && sudo apt upgrade -y` weekly), and never commit
-your production env file to git.
+MIT — see [LICENSE](./LICENSE).
