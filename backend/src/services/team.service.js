@@ -241,6 +241,18 @@ export const teamService = {
     });
   },
 
+  async disband({ teamId, actorId }) {
+    return prisma.$transaction(async (tx) => {
+      const team = await membershipService.loadTeamForUpdate(tx, teamId);
+      if (team.leaderId !== actorId) throw Forbidden('Only the team leader can dissolve the team');
+      if (team.status === 'FINALIZED') throw Conflict('Finalized teams cannot be dissolved');
+      if (team.status === 'DISQUALIFIED') throw Conflict('Disqualified teams cannot be dissolved');
+
+      await tx.team.delete({ where: { id: teamId } });
+      return { disbanded: true, teamId };
+    });
+  },
+
   /**
    * Transfer leadership to an existing team member. Atomic:
    *   - re-read team inside tx (TOCTOU-safe)

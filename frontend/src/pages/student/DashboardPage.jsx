@@ -20,6 +20,7 @@ import { Modal } from '../../components/ui/Modal.jsx';
 import { formatRelative, titleCase } from '../../utils/format.js';
 
 const ROLE_TONE = { ADMIN: 'warn', JURY: 'cyan', STUDENT: 'live' };
+const EXPLORE_CARD_CLASS = 'glass-card flat min-h-[188px] rounded-[4px] px-5 py-4 transition duration-200 ease-out hover:-translate-y-1 hover:border-accent-cyan/40 hover:bg-white/[0.04] hover:shadow-[0_14px_32px_rgba(6,182,212,0.08)]';
 
 const ProfileTab = ({ user }) => (
   <div className="grid gap-6 md:grid-cols-3">
@@ -568,7 +569,7 @@ const ExploreTab = ({ user, myTeam }) => {
             const action = memberActionState(member);
 
             return (
-              <article key={member.id} className="glass-card flat space-y-3">
+              <article key={member.id} className={`${EXPLORE_CARD_CLASS} flex flex-col justify-between space-y-3`}>
                 <button
                   type="button"
                   className="w-full text-left"
@@ -587,7 +588,7 @@ const ExploreTab = ({ user, myTeam }) => {
                   </div>
                 </button>
 
-                <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-text-secondary">
+                <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] leading-relaxed text-text-secondary">
                   <span>Reg #: {member.registrationNo ?? '-'}</span>
                   <span>·</span>
                   <span>{member.institution?.name ?? 'No institution'}</span>
@@ -599,7 +600,7 @@ const ExploreTab = ({ user, myTeam }) => {
                   )}
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-1">
                   <div>
                     <button
                       type="button"
@@ -653,7 +654,7 @@ const ExploreTab = ({ user, myTeam }) => {
           {visibleTeams.map((team) => {
             const action = teamActionState(team);
             return (
-              <article key={team.id} className="glass-card flat space-y-3">
+              <article key={team.id} className={`${EXPLORE_CARD_CLASS} flex flex-col justify-between space-y-3`}>
                 <button
                   type="button"
                   className="w-full text-left"
@@ -673,13 +674,13 @@ const ExploreTab = ({ user, myTeam }) => {
                   </div>
                 </button>
 
-                <div className="font-mono text-[11px] text-text-dim">
+                <div className="font-mono text-[11px] leading-relaxed text-text-dim">
                   {action.disabled
                     ? action.label
                     : 'Open for join requests right now.'}
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-1">
                   <div>
                     <button
                       type="button"

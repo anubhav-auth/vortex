@@ -87,3 +87,16 @@ export const finalize = async (req, res) => {
   });
   res.json({ team });
 };
+
+export const disband = async (req, res) => {
+  const result = await teamService.disband({
+    teamId: req.params.id,
+    actorId: req.user.id,
+  });
+  auditService.record({
+    actorId: req.user.id, action: 'TEAM_FORCE_MODIFIED',
+    entityType: 'Team', entityId: req.params.id,
+    details: { op: 'disbandByLeader' },
+  });
+  res.json(result);
+};

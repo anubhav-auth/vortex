@@ -59,6 +59,12 @@ router.post('/:id/finalize',
   ah(team.finalize),
 );
 
+router.delete('/:id',
+  requireRole('STUDENT'),
+  validate({ params: teamIdParamSchema }),
+  ah(team.disband),
+);
+
 router.post('/:id/transfer-leadership',
   requireRole('STUDENT'),
   validate({ params: teamIdParamSchema, body: transferLeadershipSchema }),

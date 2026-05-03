@@ -223,6 +223,11 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
 
   const isLeader = team.leader.id === user.id;
   const isFinalized = team.status === 'FINALIZED';
+  const dissolveBlockedReason = team.status === 'FINALIZED'
+    ? 'Finalized teams cannot be dissolved.'
+    : team.status === 'DISQUALIFIED'
+      ? 'Disqualified teams cannot be dissolved.'
+      : null;
 
   const invites  = useApi(() => api.get(`/api/teams/${team.id}/invites`), [team.id]);
   const requests = useApi(() => api.get(`/api/teams/${team.id}/join-requests`), [team.id]);
@@ -267,6 +272,18 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
     action('Leadership transferred.', () => api.post(`/api/teams/${team.id}/transfer-leadership`, { newLeaderId }));
   };
 
+  const dissolveTeam = async () => {
+    if (dissolveBlockedReason) return;
+    const ok = await confirm({
+      title: `Dissolve ${team.name}?`,
+      message: 'This deletes the team, its pending invites, join requests, and roster state. This cannot be undone.',
+      tone: 'crit',
+      confirmLabel: 'Dissolve team',
+    });
+    if (!ok) return;
+    action('Team dissolved.', () => api.delete(`/api/teams/${team.id}`));
+  };
+
   return (
     <div className="space-y-6">
       <header className="glass-card space-y-4">
@@ -303,12 +320,26 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
               <UserPlus size={12} /> Invite member
             </button>
           )}
+          {isLeader && (
+            <button
+              className="danger-button inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={dissolveTeam}
+              disabled={Boolean(dissolveBlockedReason)}
+              title={dissolveBlockedReason ?? 'Dissolve this team'}
+            >
+              <XCircle size={12} /> Dissolve team
+            </button>
+          )}
           {!isLeader && !isFinalized && (
             <button className="danger-button inline-flex items-center gap-2" onClick={requestLeave}>
               <LogOut size={12} /> Request to leave
             </button>
           )}
         </div>
+
+        {isLeader && dissolveBlockedReason && (
+          <div className="font-mono text-[11px] text-text-dim">{dissolveBlockedReason}</div>
+        )}
       </header>
 
       <section className="space-y-3">
