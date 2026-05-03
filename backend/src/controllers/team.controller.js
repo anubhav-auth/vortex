@@ -24,6 +24,11 @@ export const get = async (req, res) => {
   res.json({ team });
 };
 
+export const mine = async (req, res) => {
+  const team = await teamService.getForUser(req.user.id);
+  res.json({ team: team ?? null });
+};
+
 export const list = async (req, res) => {
   const teams = await teamService.list(req.query);
   res.json({ count: teams.length, teams });
@@ -32,6 +37,14 @@ export const list = async (req, res) => {
 export const listJoinable = async (req, res) => {
   const teams = await teamService.listJoinable(req.query);
   res.json({ count: teams.length, teams });
+};
+
+export const listAvailableMembers = async (req, res) => {
+  const users = await teamService.listAvailableMembers({
+    actorId: req.user.id,
+    search: req.query.search,
+  });
+  res.json({ count: users.length, users });
 };
 
 // Live preview of qualification for a single team. Read-only, no status flip.

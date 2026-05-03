@@ -410,33 +410,26 @@ const Stat = ({ label, value }) => (
 
 // ── Page entry ────────────────────────────────────────────────────────────
 export const TeamFormationPage = () => {
-  const { user } = useAuth();
-  const me = useApi(() => api.get('/api/auth/me'), []);
-  const teams = useApi(() => api.get('/api/teams'), []);
-
-  // Derive my membership from the listing — the backend exposes that
-  // implicitly via TeamMember.userId @unique.
-  const myTeam = useMemo(() => {
-    if (!teams.data) return null;
-    return teams.data.teams.find(
-      (t) => t.leader.id === user.id || t.members?.some?.((m) => m.user.id === user.id),
-    ) ?? null;
-  }, [teams.data, user.id]);
+  const myTeam = useApi(() => api.get('/api/teams/mine'), []);
 
   // Need full detail (with members) — list is light. Refetch detail when needed.
   const detail = useApi(
-    () => myTeam ? api.get(`/api/teams/${myTeam.id}`) : Promise.resolve(null),
-    [myTeam?.id],
+    () => myTeam.data?.team ? api.get(`/api/teams/${myTeam.data.team.id}`) : Promise.resolve(null),
+    [myTeam.data?.team?.id],
   );
   const evaluation = useApi(
-    () => myTeam ? api.get(`/api/teams/${myTeam.id}/evaluation`) : Promise.resolve(null),
-    [myTeam?.id],
+    () => myTeam.data?.team ? api.get(`/api/teams/${myTeam.data.team.id}/evaluation`) : Promise.resolve(null),
+    [myTeam.data?.team?.id],
   );
 
   // Refetch my-team detail when invite/request events touch us.
-  useSocketEvent('invite:received', () => { teams.refetch(); }, []);
+  useSocketEvent('invite:received', () => { myTeam.refetch(); }, []);
 
-  const refresh = () => { me.refetch(); teams.refetch(); detail.refetch(); evaluation.refetch(); };
+  const refresh = () => {
+    myTeam.refetch();
+    detail.refetch();
+    evaluation.refetch();
+  };
 
   return (
     <section className="mx-auto max-w-6xl px-6 py-12">
@@ -446,9 +439,9 @@ export const TeamFormationPage = () => {
         description="Create a team, send invites, request to join, transfer leadership, and finalize when ready."
       />
 
-      {teams.loading && <CardSkeleton rows={3} />}
+      {myTeam.loading && <CardSkeleton rows={3} />}
 
-      {!teams.loading && !myTeam && (
+      {!myTeam.loading && !myTeam.data?.team && (
         <div className="grid gap-8 lg:grid-cols-[1.2fr_1fr]">
           <CreateTeamForm onCreated={refresh} />
           <JoinableList />

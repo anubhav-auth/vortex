@@ -31,6 +31,18 @@ const TEAM_LIST_FIELDS = {
   leader: { select: { id: true, fullName: true } },
 };
 
+const EXPLORE_MEMBER_FIELDS = {
+  id: true,
+  fullName: true,
+  email: true,
+  registrationNo: true,
+  gender: true,
+  isDomainExpert: true,
+  track: true,
+  institution: { select: { id: true, name: true } },
+  domain: { select: { id: true, name: true } },
+};
+
 export const teamService = {
   /**
    * Create a team. The creator becomes its LEADER and first member.
@@ -105,6 +117,18 @@ export const teamService = {
     });
   },
 
+  getForUser(userId) {
+    return prisma.team.findFirst({
+      where: {
+        OR: [
+          { leaderId: userId },
+          { members: { some: { userId } } },
+        ],
+      },
+      include: TEAM_DETAIL_INCLUDE,
+    });
+  },
+
   list({ status, domainId, psId, search } = {}) {
     return prisma.team.findMany({
       where: {
@@ -140,6 +164,26 @@ export const teamService = {
       ...t,
       missing: rulesService.unmetReasons(t, rules),
     }));
+  },
+
+  listAvailableMembers({ actorId, search } = {}) {
+    return prisma.user.findMany({
+      where: {
+        role: 'STUDENT',
+        verificationStatus: 'VERIFIED',
+        membership: { is: null },
+        ...(actorId && { NOT: { id: actorId } }),
+        ...(search && {
+          OR: [
+            { fullName: { contains: search, mode: 'insensitive' } },
+            { email: { contains: search, mode: 'insensitive' } },
+            { registrationNo: { contains: search, mode: 'insensitive' } },
+          ],
+        }),
+      },
+      select: EXPLORE_MEMBER_FIELDS,
+      orderBy: { createdAt: 'desc' },
+    });
   },
 
   /**
