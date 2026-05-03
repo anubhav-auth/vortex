@@ -1,11 +1,25 @@
+import { Resend } from 'resend';
 import { logger } from './logger.js';
 
-// Stub mailer — logs structured records. Swap for SendGrid/SES/nodemailer
-// without touching callers. NEVER inline the password into a non-mail log.
+const resend = process.env.RESEND_API_KEY
+  ? new Resend(process.env.RESEND_API_KEY)
+  : null;
+
+const FROM = process.env.MAIL_FROM ?? 'TechExpress <onboarding@resend.dev>';
 
 export const sendMail = async ({ to, subject, text }) => {
-  logger.info('mail', { to, subject, body: text });
-  return { delivered: true };
+  if (!resend) {
+    logger.warn('mail.skipped — no RESEND_API_KEY', { to, subject, body: text });
+    return { delivered: false, reason: 'no-key' };
+  }
+  try {
+    const result = await resend.emails.send({ from: FROM, to, subject, text });
+    logger.info('mail.sent', { to, subject, id: result.data?.id });
+    return { delivered: true };
+  } catch (err) {
+    logger.error('mail.failed', { to, subject, err: err.message });
+    return { delivered: false, error: err.message };
+  }
 };
 
 export const sendVerificationApprovedMail = ({ to, fullName, password }) =>
