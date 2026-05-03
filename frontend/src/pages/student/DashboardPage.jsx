@@ -16,6 +16,7 @@ import { Empty } from '../../components/ui/Empty.jsx';
 import { Badge } from '../../components/ui/Badge.jsx';
 import { CardSkeleton } from '../../components/ui/Skeleton.jsx';
 import { Spinner } from '../../components/ui/Spinner.jsx';
+import { Modal } from '../../components/ui/Modal.jsx';
 import { formatRelative, titleCase } from '../../utils/format.js';
 
 const ROLE_TONE = { ADMIN: 'warn', JURY: 'cyan', STUDENT: 'live' };
@@ -213,10 +214,192 @@ const BroadcastsTab = () => {
   );
 };
 
+const MemberDetailsModal = ({ member, action, busy, onInvite, onClose }) => {
+  if (!member) return null;
+
+  return (
+    <Modal
+      open={Boolean(member)}
+      onClose={onClose}
+      title="Member details"
+      size="lg"
+      footer={(
+        <>
+          <button className="ghost-button" onClick={onClose}>Close</button>
+          <button
+            className="glow-button inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={action.disabled || busy}
+            onClick={() => onInvite(member.id)}
+            title={action.reason}
+          >
+            {busy ? <Spinner size={12} /> : <UserPlus size={12} />}
+            {busy ? 'Sending...' : action.label}
+          </button>
+        </>
+      )}
+    >
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="font-sans text-[22px] font-bold text-text-primary">{member.fullName}</div>
+            <div className="font-mono text-[12px] text-text-secondary">{member.email}</div>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <Badge tone="cyan">{member.domain?.name ?? 'No domain'}</Badge>
+            {member.gender === 'FEMALE' && <Badge tone="live">Female</Badge>}
+            {member.isDomainExpert && <Badge tone="warn">Expert</Badge>}
+            <Badge tone={member.verificationStatus === 'VERIFIED' ? 'live' : 'warn'}>
+              {titleCase(member.verificationStatus)}
+            </Badge>
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field icon={IdCard} label="Registration #" value={member.registrationNo ?? '-'} />
+          <Field icon={Layers} label="Track" value={member.track ?? '-'} />
+          <Field icon={GraduationCap} label="Institution" value={member.institution?.name ?? '-'} />
+          <Field icon={Mail} label="Phone" value={member.phone ?? '-'} />
+          <Field icon={Mail} label="Discord" value={member.discordId ?? '-'} />
+          <Field
+            icon={Users}
+            label="Team"
+            value={member.membership?.team ? `${member.membership.team.name} (${member.membership.team.status})` : 'No team yet'}
+          />
+        </div>
+
+        {member.bio && (
+          <div className="border-t border-border-dim pt-4">
+            <div className="section-label mb-2">Bio</div>
+            <p className="font-mono text-[12px] leading-relaxed text-text-secondary">{member.bio}</p>
+          </div>
+        )}
+
+        {(member.linkedinUrl || member.githubUrl) && (
+          <div className="flex flex-wrap gap-2 border-t border-border-dim pt-4">
+            {member.linkedinUrl && (
+              <a
+                href={member.linkedinUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="ghost-button inline-flex items-center gap-2"
+              >
+                <Linkedin size={12} /> LinkedIn
+              </a>
+            )}
+            {member.githubUrl && (
+              <a
+                href={member.githubUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="ghost-button inline-flex items-center gap-2"
+              >
+                <Github size={12} /> GitHub
+              </a>
+            )}
+          </div>
+        )}
+
+        <div className="border-t border-border-dim pt-4 font-mono text-[11px] text-text-dim">
+          {action.reason}
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+const TeamDetailsModal = ({ team, action, busy, onRequest, onClose }) => {
+  const detail = useApi(
+    () => team ? api.get(`/api/teams/${team.id}`) : Promise.resolve(null),
+    [team?.id],
+  );
+
+  const fullTeam = detail.data?.team ?? team;
+
+  return (
+    <Modal
+      open={Boolean(team)}
+      onClose={onClose}
+      title="Team details"
+      size="xl"
+      footer={(
+        <>
+          <button className="ghost-button" onClick={onClose}>Close</button>
+          <button
+            className="glow-button inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={action?.disabled || busy}
+            onClick={() => team && onRequest(team.id)}
+          >
+            {busy ? <Spinner size={12} /> : <Send size={12} />}
+            {busy ? 'Sending...' : action?.label ?? 'Send request'}
+          </button>
+        </>
+      )}
+    >
+      {detail.loading ? (
+        <CardSkeleton rows={3} />
+      ) : fullTeam ? (
+        <div className="space-y-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="font-sans text-[22px] font-bold text-text-primary">{fullTeam.name}</div>
+              <div className="font-mono text-[12px] text-text-secondary">
+                {fullTeam.domain?.name ?? 'No domain'} · led by {fullTeam.leader?.fullName}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <Badge tone={fullTeam.status === 'FORMING' ? 'cyan' : 'dim'}>{fullTeam.status}</Badge>
+              <Badge tone="dim">{fullTeam.memberCount ?? fullTeam.members?.length ?? 0} members</Badge>
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field icon={Layers} label="Domain" value={fullTeam.domain?.name ?? '-'} />
+            <Field icon={User} label="Leader" value={fullTeam.leader?.fullName ?? '-'} />
+            <Field icon={Users} label="Status" value={fullTeam.status ?? '-'} />
+            <Field icon={Layers} label="Problem statement" value={fullTeam.problemStatement?.title ?? '-'} />
+          </div>
+
+          <div className="border-t border-border-dim pt-4">
+            <div className="section-label mb-3">Team members</div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {(fullTeam.members ?? []).map((member) => (
+                <article key={member.user.id} className="rounded-[4px] border border-border-dim bg-bg-void/60 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-sans text-[14px] font-bold text-text-primary">{member.user.fullName}</div>
+                      <div className="font-mono text-[11px] text-text-secondary">{member.user.email}</div>
+                    </div>
+                    <Badge tone={member.role === 'LEADER' ? 'cyan' : 'dim'}>{member.role}</Badge>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    <Badge tone="dim">{member.user.domain?.name ?? 'No domain'}</Badge>
+                    {member.user.gender === 'FEMALE' && <Badge tone="live">Female</Badge>}
+                    {member.user.isDomainExpert && <Badge tone="warn">Expert</Badge>}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+
+          <div className="border-t border-border-dim pt-4 font-mono text-[11px] text-text-dim">
+            {action?.disabled ? action.label : 'This team is available for join requests.'}
+          </div>
+        </div>
+      ) : (
+        <Empty icon={Users} title="Team not found" description="This team detail could not be loaded." className="py-10" />
+      )}
+    </Modal>
+  );
+};
+
 const ExploreTab = ({ user, myTeam }) => {
   const toast = useToast();
   const [memberFilter, setMemberFilter] = useState('');
   const [teamFilter, setTeamFilter] = useState('');
+  const [selectedMember, setSelectedMember] = useState(null);
+  const [selectedTeam, setSelectedTeam] = useState(null);
+  const [inviteingId, setInviteingId] = useState('');
+  const [requestingTeamId, setRequestingTeamId] = useState('');
 
   const members = useApi(() => api.get('/api/teams/explore/members'), []);
   const teams = useApi(() => api.get('/api/teams'), []);
@@ -312,16 +495,20 @@ const ExploreTab = ({ user, myTeam }) => {
 
   const sendInvite = async (inviteeId) => {
     if (!leaderOwnTeam) return;
+    setInviteingId(inviteeId);
     try {
       await api.post(`/api/teams/${leaderOwnTeam.id}/invites`, { inviteeId });
       toast.success('Invite sent.');
       pendingInvites.refetch();
     } catch (err) {
       toast.error(err.message);
+    } finally {
+      setInviteingId('');
     }
   };
 
   const sendJoinRequest = async (teamId) => {
+    setRequestingTeamId(teamId);
     try {
       await api.post(`/api/teams/${teamId}/join-requests`);
       toast.success('Join request sent.');
@@ -329,6 +516,8 @@ const ExploreTab = ({ user, myTeam }) => {
       joinable.refetch();
     } catch (err) {
       toast.error(err.message);
+    } finally {
+      setRequestingTeamId('');
     }
   };
 
@@ -380,42 +569,56 @@ const ExploreTab = ({ user, myTeam }) => {
 
             return (
               <article key={member.id} className="glass-card flat space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-sans text-[15px] font-bold text-text-primary">{member.fullName}</div>
-                    <div className="font-mono text-[12px] text-text-secondary">{member.email}</div>
-                  </div>
-                  <div className="flex flex-wrap justify-end gap-1.5">
-                    <Badge tone="cyan">{member.domain?.name ?? 'No domain'}</Badge>
-                    {member.gender === 'FEMALE' && <Badge tone="live">Female</Badge>}
-                    {member.isDomainExpert && <Badge tone="warn">Expert</Badge>}
-                    {member.verificationStatus !== 'VERIFIED' && <Badge tone="warn">{titleCase(member.verificationStatus)}</Badge>}
-                  </div>
-                </div>
-
-                <div className="grid gap-2 font-mono text-[11px] text-text-secondary sm:grid-cols-2">
-                  <div>Reg #: {member.registrationNo ?? '-'}</div>
-                  <div>Track: {member.track ?? '-'}</div>
-                  <div className="sm:col-span-2">Institution: {member.institution?.name ?? '-'}</div>
-                </div>
-
-                {member.membership?.team && (
-                  <div className="font-mono text-[11px] text-text-secondary">
-                    Team: {member.membership.team.name} ({member.membership.team.status})
-                  </div>
-                )}
-
-                <div className="font-mono text-[11px] text-text-dim">{action.reason}</div>
-
                 <button
-                  className="ghost-button inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={action.disabled}
-                  onClick={() => sendInvite(member.id)}
-                  title={action.reason}
+                  type="button"
+                  className="w-full text-left"
+                  onClick={() => setSelectedMember(member)}
                 >
-                  {pendingInvites.loading ? <Spinner size={12} /> : <UserPlus size={12} />}
-                  {action.label}
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-sans text-[15px] font-bold text-text-primary">{member.fullName}</div>
+                      <div className="font-mono text-[12px] text-text-secondary">{member.email}</div>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-1.5">
+                      <Badge tone="cyan">{member.domain?.name ?? 'No domain'}</Badge>
+                      {member.membership?.team && <Badge tone="dim">In team</Badge>}
+                      {member.verificationStatus !== 'VERIFIED' && <Badge tone="warn">{titleCase(member.verificationStatus)}</Badge>}
+                    </div>
+                  </div>
                 </button>
+
+                <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-text-secondary">
+                  <span>Reg #: {member.registrationNo ?? '-'}</span>
+                  <span>·</span>
+                  <span>{member.institution?.name ?? 'No institution'}</span>
+                  {member.membership?.team && (
+                    <>
+                      <span>·</span>
+                      <span>{member.membership.team.name}</span>
+                    </>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <button
+                      type="button"
+                      className="ghost-button inline-flex items-center gap-2"
+                      onClick={() => setSelectedMember(member)}
+                    >
+                      <ExternalLink size={12} /> View details
+                    </button>
+                  </div>
+                  <button
+                    className="ghost-button inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={action.disabled || inviteingId === member.id}
+                    onClick={() => sendInvite(member.id)}
+                    title={action.reason}
+                  >
+                    {inviteingId === member.id ? <Spinner size={12} /> : <UserPlus size={12} />}
+                    {inviteingId === member.id ? 'Sending...' : action.label}
+                  </button>
+                </div>
               </article>
             );
           })}
@@ -451,18 +654,24 @@ const ExploreTab = ({ user, myTeam }) => {
             const action = teamActionState(team);
             return (
               <article key={team.id} className="glass-card flat space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-sans text-[15px] font-bold text-text-primary">{team.name}</div>
-                    <div className="font-mono text-[12px] text-text-secondary">
-                      {team.domain?.name} · led by {team.leader?.fullName}
+                <button
+                  type="button"
+                  className="w-full text-left"
+                  onClick={() => setSelectedTeam(team)}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-sans text-[15px] font-bold text-text-primary">{team.name}</div>
+                      <div className="font-mono text-[12px] text-text-secondary">
+                        {team.domain?.name} · led by {team.leader?.fullName}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-1.5">
+                      <Badge tone={joinableTeamIds.has(team.id) ? 'cyan' : 'dim'}>{team.status}</Badge>
+                      <Badge tone="dim">{team.memberCount} members</Badge>
                     </div>
                   </div>
-                  <div className="flex flex-wrap justify-end gap-1.5">
-                    <Badge tone={joinableTeamIds.has(team.id) ? 'cyan' : 'dim'}>{team.status}</Badge>
-                    <Badge tone="dim">{team.memberCount} members</Badge>
-                  </div>
-                </div>
+                </button>
 
                 <div className="font-mono text-[11px] text-text-dim">
                   {action.disabled
@@ -470,19 +679,46 @@ const ExploreTab = ({ user, myTeam }) => {
                     : 'Open for join requests right now.'}
                 </div>
 
-                <button
-                  className="glow-button inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={action.disabled}
-                  onClick={() => sendJoinRequest(team.id)}
-                >
-                  {outgoingRequests.loading ? <Spinner size={12} /> : <Send size={12} />}
-                  {action.label}
-                </button>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <button
+                      type="button"
+                      className="ghost-button inline-flex items-center gap-2"
+                      onClick={() => setSelectedTeam(team)}
+                    >
+                      <ExternalLink size={12} /> View details
+                    </button>
+                  </div>
+                  <button
+                    className="glow-button inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={action.disabled || requestingTeamId === team.id}
+                    onClick={() => sendJoinRequest(team.id)}
+                  >
+                    {requestingTeamId === team.id ? <Spinner size={12} /> : <Send size={12} />}
+                    {requestingTeamId === team.id ? 'Sending...' : action.label}
+                  </button>
+                </div>
               </article>
             );
           })}
         </div>
       </section>
+
+      <MemberDetailsModal
+        member={selectedMember}
+        action={selectedMember ? memberActionState(selectedMember) : { disabled: true, label: 'Invite unavailable', reason: '' }}
+        busy={inviteingId === selectedMember?.id}
+        onInvite={sendInvite}
+        onClose={() => setSelectedMember(null)}
+      />
+
+      <TeamDetailsModal
+        team={selectedTeam}
+        action={selectedTeam ? teamActionState(selectedTeam) : { disabled: true, label: 'Request unavailable' }}
+        busy={requestingTeamId === selectedTeam?.id}
+        onRequest={sendJoinRequest}
+        onClose={() => setSelectedTeam(null)}
+      />
     </div>
   );
 };
