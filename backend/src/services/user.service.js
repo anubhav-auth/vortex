@@ -136,6 +136,33 @@ export const userService = {
     return { user: updated, snapshot: user };
   },
 
+  async restoreRevokedStudent(userId) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, verificationStatus: true, fullName: true, email: true },
+    });
+    if (!user) throw NotFound('User not found');
+    if (user.role !== 'STUDENT') throw Forbidden('Only student accounts can be restored');
+    if (user.verificationStatus !== 'REVOKED') {
+      throw Conflict('Only REVOKED users can be restored');
+    }
+
+    const plaintextPassword = generateSixDigitCode();
+    const passwordHash = await hashPassword(plaintextPassword);
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        verificationStatus: 'VERIFIED',
+        passwordHash,
+        passwordIssuedAt: new Date(),
+      },
+      select: PUBLIC_USER_FIELDS,
+    });
+
+    return { user: updated, plaintextPassword, snapshot: user };
+  },
+
   // Issue a fresh 6-digit code for an already-VERIFIED user (lost-password).
   async reissuePassword(userId) {
     const user = await prisma.user.findUnique({

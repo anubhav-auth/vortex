@@ -55,3 +55,16 @@ export const sendAccessRevokedMail = ({ to, fullName }) =>
       `Your access to Vortex has been revoked by an organizer.\n` +
       `Contact the team if you have questions.\n`,
   });
+
+export const sendAccessRestoredMail = ({ to, fullName, password }) =>
+  sendMail({
+    to,
+    subject: 'Your Vortex access has been restored',
+    text:
+      `Hi ${fullName},\n\n` +
+      `An organizer restored your access to Vortex.\n` +
+      `Use the credentials below to log in again:\n\n` +
+      `  Email:    ${to}\n` +
+      `  Password: ${password}\n\n` +
+      `Your previous revoked password no longer works.\n`,
+  });

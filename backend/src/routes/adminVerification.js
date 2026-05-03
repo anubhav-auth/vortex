@@ -13,6 +13,7 @@ import {
   approve,
   reject,
   revoke,
+  restore,
   reissue,
 } from '../controllers/adminVerification.controller.js';
 
@@ -31,6 +32,9 @@ router.post('/students/:id/reject',
 
 router.post('/students/:id/revoke',
   validate({ params: userIdParamSchema }), ah(revoke));
+
+router.post('/students/:id/restore',
+  validate({ params: userIdParamSchema }), ah(restore));
 
 router.post('/students/:id/reissue-password',
   validate({ params: userIdParamSchema }), ah(reissue));

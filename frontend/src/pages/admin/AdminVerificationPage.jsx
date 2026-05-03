@@ -95,6 +95,21 @@ export const AdminVerificationPage = () => {
     } catch (e) { toast.error(e.message); }
   };
 
+  const restore = async (u) => {
+    const ok = await confirm({
+      title: `Undo revoke for ${u.fullName}?`,
+      message: 'This restores login access, issues a fresh 6-digit password, and emails it to the student.',
+      confirmLabel: 'Undo revoke',
+    });
+    if (!ok) return;
+    try {
+      const res = await api.post(`/api/admin/verification/students/${u.id}/restore`);
+      if (res?.password) setCredential({ user: res.user ?? u, password: res.password, label: 'Restored' });
+      toast.success('Access restored.');
+      refresh();
+    } catch (e) { toast.error(e.message); }
+  };
+
   return (
     <>
       <PageHeader
@@ -201,6 +216,9 @@ export const AdminVerificationPage = () => {
                           </button>
                           <button className="danger-button text-[10px]" onClick={() => revoke(u)}>Revoke</button>
                         </>
+                      )}
+                      {u.verificationStatus === 'REVOKED' && (
+                        <button className="glow-button text-[10px]" onClick={() => restore(u)}>Undo revoke</button>
                       )}
                     </div>
                   </td>

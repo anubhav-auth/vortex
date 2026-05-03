@@ -5,6 +5,7 @@ import {
   sendVerificationApprovedMail,
   sendVerificationRejectedMail,
   sendAccessRevokedMail,
+  sendAccessRestoredMail,
 } from '../utils/mail.js';
 
 // All handlers below require requireAuth + requireRole('ADMIN') at the route layer.
@@ -99,6 +100,30 @@ export const revoke = async (req, res) => {
   });
 
   res.json({ message: 'Access revoked', user });
+};
+
+export const restore = async (req, res) => {
+  const { user, plaintextPassword } = await userService.restoreRevokedStudent(req.params.id);
+
+  await sendAccessRestoredMail({
+    to: user.email,
+    fullName: user.fullName,
+    password: plaintextPassword,
+  });
+
+  auditService.record({
+    actorId: req.user.id,
+    action: 'USER_VERIFIED',
+    entityType: 'User',
+    entityId: user.id,
+    details: { restored: true },
+  });
+
+  res.json({
+    message: 'Access restored and credentials emailed',
+    user,
+    password: plaintextPassword,
+  });
 };
 
 export const reissue = async (req, res) => {
