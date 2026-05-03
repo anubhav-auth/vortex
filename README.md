@@ -449,6 +449,17 @@ You're back to the default state with the credentials in [§3](#3-default-creden
 
 ---
 
+## Deploying to production
+
+Local dev is just step one. To put Vortex on the internet at your own
+domain — buying a server, setting up a real database, automatic HTTPS,
+real email, backups — see the deep walkthrough in **[DEPLOY.md](./DEPLOY.md)**.
+
+Estimated cost: ~$7/month for a small event, ~$64/month for a few
+thousand users.
+
+---
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).
