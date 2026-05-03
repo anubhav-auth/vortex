@@ -52,7 +52,15 @@ export const approve = async (req, res) => {
     details: { email: user.email },
   });
 
-  res.json({ message: 'User verified and credentials emailed', user });
+  // Surface the plaintext password to the admin UI ONLY. This response
+  // never leaves the ADMIN-gated route. Treat it as a one-shot reveal —
+  // the database stores only the bcrypt hash, so once this response is
+  // discarded the password is unrecoverable except via reissue().
+  res.json({
+    message: 'User verified and credentials emailed',
+    user,
+    password: plaintextPassword,
+  });
 };
 
 export const reject = async (req, res) => {
@@ -110,5 +118,9 @@ export const reissue = async (req, res) => {
     details: { reissue: true },
   });
 
-  res.json({ message: 'New password issued and emailed' });
+  res.json({
+    message: 'New password issued and emailed',
+    password: plaintextPassword,
+    user,
+  });
 };

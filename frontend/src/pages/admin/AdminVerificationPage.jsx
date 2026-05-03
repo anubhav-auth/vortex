@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
-import { ShieldCheck, ShieldX, RefreshCw, Search, KeyRound } from 'lucide-react';
+import {
+  ShieldCheck, Search, KeyRound, Users, ShieldAlert, ShieldOff, Clock, Eye, Copy,
+} from 'lucide-react';
 import { api } from '../../lib/api.js';
 import { useApi } from '../../hooks/useApi.js';
 import { useToast } from '../../contexts/ToastContext.jsx';
@@ -11,8 +13,9 @@ import { CardSkeleton } from '../../components/ui/Skeleton.jsx';
 import { Modal } from '../../components/ui/Modal.jsx';
 import { FormField } from '../../components/ui/FormField.jsx';
 import { Spinner } from '../../components/ui/Spinner.jsx';
+import { StatTile } from '../../components/ui/StatTile.jsx';
 import { confirm } from '../../components/ui/Confirm.jsx';
-import { formatRelative, titleCase } from '../../utils/format.js';
+import { titleCase } from '../../utils/format.js';
 
 const STATUS_TONE = { PENDING: 'warn', VERIFIED: 'live', REJECTED: 'crit', REVOKED: 'crit' };
 
@@ -21,19 +24,44 @@ export const AdminVerificationPage = () => {
   const [tab, setTab] = useState('PENDING');
   const [search, setSearch] = useState('');
   const [reject, setReject] = useState(null);
+  // { user, password } shown after approve / reissue
+  const [credential, setCredential] = useState(null);
 
   const pending = useApi(() => api.get('/api/admin/verification/pending', { query: { search } }), [search]);
-  const all     = useApi(() => api.get('/api/admin/verification/students', { query: { status: tab === 'ALL' ? undefined : tab, search } }), [tab, search]);
+  // Pull all students once for stat tiles + tab content (filter client-side
+  // by status). Search is server-side so the listing stays focused.
+  const students = useApi(
+    () => api.get('/api/admin/verification/students', { query: { search } }),
+    [search],
+  );
 
-  const list = tab === 'PENDING' ? (pending.data?.users ?? []) : (all.data?.users ?? []);
-  const loading = tab === 'PENDING' ? pending.loading : all.loading;
+  // ── stats derived from full list (search-aware) ───────────────────────
+  const stats = useMemo(() => {
+    const all = students.data?.users ?? [];
+    const acc = { total: all.length, PENDING: 0, VERIFIED: 0, REJECTED: 0, REVOKED: 0 };
+    for (const u of all) acc[u.verificationStatus] = (acc[u.verificationStatus] ?? 0) + 1;
+    return acc;
+  }, [students.data]);
 
-  const refresh = () => { pending.refetch(); all.refetch(); };
+  // ── current tab list ──────────────────────────────────────────────────
+  const list = useMemo(() => {
+    if (tab === 'PENDING') return pending.data?.users ?? [];
+    const all = students.data?.users ?? [];
+    if (tab === 'ALL') return all;
+    return all.filter((u) => u.verificationStatus === tab);
+  }, [tab, pending.data, students.data]);
 
+  const loading = tab === 'PENDING' ? pending.loading : students.loading;
+
+  const refresh = () => { pending.refetch(); students.refetch(); };
+
+  // ── actions ───────────────────────────────────────────────────────────
   const approve = async (u) => {
     try {
-      await api.post(`/api/admin/verification/students/${u.id}/approve`);
-      toast.success(`Approved ${u.fullName}. 6-digit password emailed.`);
+      const res = await api.post(`/api/admin/verification/students/${u.id}/approve`);
+      toast.success(`Approved ${u.fullName}.`);
+      // Surface the freshly-issued password to the admin one-shot.
+      if (res?.password) setCredential({ user: res.user ?? u, password: res.password, label: 'Approved' });
       refresh();
     } catch (e) { toast.error(e.message); }
   };
@@ -52,16 +80,18 @@ export const AdminVerificationPage = () => {
     } catch (e) { toast.error(e.message); }
   };
 
-  const reissue = async (u) => {
+  const revealCredentials = async (u) => {
     const ok = await confirm({
-      title: `Reissue password for ${u.fullName}?`,
-      message: 'A fresh 6-digit code will replace their current password and be emailed.',
-      confirmLabel: 'Reissue',
+      title: `Reveal credentials for ${u.fullName}?`,
+      message:
+        'The current password is hashed and unrecoverable. To show a usable code, the system will REISSUE a new 6-digit password — replacing the current one and emailing the user.',
+      confirmLabel: 'Reissue & reveal',
     });
     if (!ok) return;
     try {
-      await api.post(`/api/admin/verification/students/${u.id}/reissue-password`);
-      toast.success('New password emailed.');
+      const res = await api.post(`/api/admin/verification/students/${u.id}/reissue-password`);
+      if (res?.password) setCredential({ user: res.user ?? u, password: res.password, label: 'Reissued' });
+      toast.success('New password issued.');
     } catch (e) { toast.error(e.message); }
   };
 
@@ -74,80 +104,115 @@ export const AdminVerificationPage = () => {
         actions={
           <div className="relative w-72">
             <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-dim" />
-            <input className="input-glass pl-9" placeholder="Search name / email / reg #" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input
+              className="input-glass pl-9"
+              placeholder="Search name / email / reg #"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
         }
       />
+
+      {/* ── Stat tiles ─────────────────────────────────────────────────── */}
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <StatTile icon={Users}        label="Total"     value={stats.total} />
+        <StatTile icon={ShieldCheck}  label="Verified"  value={stats.VERIFIED} tone="live" hint="Cleared to log in" />
+        <StatTile icon={Clock}        label="Pending"   value={stats.PENDING}  tone="warn" hint="Awaiting review" />
+        <StatTile icon={ShieldAlert}  label="Rejected"  value={stats.REJECTED} tone="crit" />
+        <StatTile icon={ShieldOff}    label="Revoked"   value={stats.REVOKED}  tone="crit" />
+      </div>
 
       <Tabs
         className="mb-4"
         value={tab}
         onChange={setTab}
         items={[
-          { value: 'PENDING',  label: 'Pending',  badge: pending.data?.users.length },
-          { value: 'VERIFIED', label: 'Verified' },
-          { value: 'REJECTED', label: 'Rejected' },
-          { value: 'REVOKED',  label: 'Revoked'  },
-          { value: 'ALL',      label: 'All'      },
+          { value: 'PENDING',  label: 'Pending',  badge: stats.PENDING  || undefined },
+          { value: 'VERIFIED', label: 'Verified', badge: stats.VERIFIED || undefined },
+          { value: 'REJECTED', label: 'Rejected', badge: stats.REJECTED || undefined },
+          { value: 'REVOKED',  label: 'Revoked',  badge: stats.REVOKED  || undefined },
+          { value: 'ALL',      label: 'All',      badge: stats.total    || undefined },
         ]}
       />
 
       {loading && <CardSkeleton rows={4} />}
-      {!loading && list.length === 0 && <Empty icon={ShieldCheck} title="Nothing to review" description="Pending registrations show up here." />}
+      {!loading && list.length === 0 && (
+        <Empty
+          icon={ShieldCheck}
+          title="Nothing here"
+          description={tab === 'PENDING'
+            ? 'No pending registrations. New self-registrations land here for review.'
+            : `No ${tab.toLowerCase()} accounts match your filters.`}
+        />
+      )}
 
-      <div className="overflow-hidden rounded-[4px] border border-border-dim bg-bg-surface">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border-dim text-left">
-              <Th>Operative</Th>
-              <Th>Email</Th>
-              <Th>Reg #</Th>
-              <Th>Institution</Th>
-              <Th>Domain</Th>
-              <Th>Match</Th>
-              <Th>Status</Th>
-              <Th align="right">Actions</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((u) => (
-              <tr key={u.id} className="border-b border-border-dim/60 last:border-0 hover:bg-white/[0.02]">
-                <td className="px-4 py-3 font-mono text-[12px] text-text-primary">{u.fullName}</td>
-                <td className="px-4 py-3 font-mono text-[12px] text-text-secondary">{u.email}</td>
-                <td className="px-4 py-3 font-mono text-[12px] text-text-secondary">{u.registrationNo ?? '—'}</td>
-                <td className="px-4 py-3 font-mono text-[12px] text-text-secondary">{u.institution?.name ?? '—'}</td>
-                <td className="px-4 py-3 font-mono text-[12px] text-text-secondary">{u.domain?.name ?? '—'}</td>
-                <td className="px-4 py-3">
-                  {u.registryMatch ? (
-                    u.registryMatch.matched
-                      ? <Badge tone={u.registryMatch.emailMatches === false ? 'warn' : 'live'} dot>{u.registryMatch.emailMatches === false ? 'Email mismatch' : 'Matched'}</Badge>
-                      : <Badge tone="warn">No match</Badge>
-                  ) : <span className="text-text-dim">—</span>}
-                </td>
-                <td className="px-4 py-3"><Badge tone={STATUS_TONE[u.verificationStatus]} dot>{titleCase(u.verificationStatus)}</Badge></td>
-                <td className="px-4 py-3">
-                  <div className="flex justify-end gap-1.5">
-                    {u.verificationStatus === 'PENDING' && (
-                      <>
-                        <button className="glow-button text-[10px]" onClick={() => approve(u)}>Approve</button>
-                        <button className="danger-button text-[10px]" onClick={() => setReject(u)}>Reject</button>
-                      </>
-                    )}
-                    {u.verificationStatus === 'VERIFIED' && (
-                      <>
-                        <button className="ghost-button text-[10px]" onClick={() => reissue(u)} title="Reissue password"><KeyRound size={10}/></button>
-                        <button className="danger-button text-[10px]" onClick={() => revoke(u)}>Revoke</button>
-                      </>
-                    )}
-                  </div>
-                </td>
+      {list.length > 0 && (
+        <div className="overflow-hidden rounded-[4px] border border-border-dim bg-bg-surface">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border-dim text-left">
+                <Th>Operative</Th>
+                <Th>Email</Th>
+                <Th>Reg #</Th>
+                <Th>Institution</Th>
+                <Th>Domain</Th>
+                {tab === 'PENDING' && <Th>Match</Th>}
+                <Th>Status</Th>
+                <Th align="right">Actions</Th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {list.map((u) => (
+                <tr key={u.id} className="border-b border-border-dim/60 last:border-0 hover:bg-white/[0.02]">
+                  <td className="px-4 py-3 font-mono text-[12px] text-text-primary">{u.fullName}</td>
+                  <td className="px-4 py-3 font-mono text-[12px] text-text-secondary">{u.email}</td>
+                  <td className="px-4 py-3 font-mono text-[12px] text-text-secondary">{u.registrationNo ?? '—'}</td>
+                  <td className="px-4 py-3 font-mono text-[12px] text-text-secondary">{u.institution?.name ?? '—'}</td>
+                  <td className="px-4 py-3 font-mono text-[12px] text-text-secondary">{u.domain?.name ?? '—'}</td>
+                  {tab === 'PENDING' && (
+                    <td className="px-4 py-3">
+                      {u.registryMatch?.matched
+                        ? <Badge tone={u.registryMatch.emailMatches === false ? 'warn' : 'live'} dot>
+                            {u.registryMatch.emailMatches === false ? 'Email mismatch' : 'Matched'}
+                          </Badge>
+                        : <Badge tone="warn">No match</Badge>}
+                    </td>
+                  )}
+                  <td className="px-4 py-3">
+                    <Badge tone={STATUS_TONE[u.verificationStatus]} dot>{titleCase(u.verificationStatus)}</Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-1.5">
+                      {u.verificationStatus === 'PENDING' && (
+                        <>
+                          <button className="glow-button text-[10px]" onClick={() => approve(u)}>Approve</button>
+                          <button className="danger-button text-[10px]" onClick={() => setReject(u)}>Reject</button>
+                        </>
+                      )}
+                      {u.verificationStatus === 'VERIFIED' && (
+                        <>
+                          <button
+                            className="ghost-button inline-flex items-center gap-1 text-[10px]"
+                            onClick={() => revealCredentials(u)}
+                            title="Reissue + reveal a fresh 6-digit password"
+                          >
+                            <Eye size={10}/> Reveal
+                          </button>
+                          <button className="danger-button text-[10px]" onClick={() => revoke(u)}>Revoke</button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <RejectModal target={reject} onClose={() => setReject(null)} onDone={refresh} />
+      <CredentialModal cred={credential} onClose={() => setCredential(null)} />
     </>
   );
 };
@@ -188,3 +253,57 @@ const RejectModal = ({ target, onClose, onDone }) => {
     </Modal>
   );
 };
+
+const CredentialModal = ({ cred, onClose }) => {
+  const toast = useToast();
+  if (!cred) return null;
+
+  const copy = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Copied to clipboard.');
+    } catch {
+      toast.warn('Copy failed — select and copy manually.');
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} size="sm" title={`${cred.label}: credentials`}
+      footer={
+        <button className="glow-button" onClick={onClose}>Done</button>
+      }
+    >
+      <div className="space-y-4">
+        <div className="rounded-[4px] border border-status-warn/40 bg-status-warn/5 p-3 font-mono text-[11px] leading-relaxed text-status-warn">
+          One-shot reveal. The plaintext password is not stored — only its bcrypt hash. Copy or share now; closing this modal discards it from the UI.
+        </div>
+
+        <CredRow
+          label="Email"
+          value={cred.user?.email ?? '—'}
+          onCopy={() => copy(cred.user?.email ?? '')}
+        />
+        <CredRow
+          label="Password"
+          value={cred.password}
+          onCopy={() => copy(cred.password)}
+          mono
+        />
+      </div>
+    </Modal>
+  );
+};
+
+const CredRow = ({ label, value, onCopy, mono }) => (
+  <div>
+    <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.15em] text-text-dim">{label}</div>
+    <div className="flex items-center gap-2">
+      <code className={`flex-1 select-all rounded-[4px] border border-border-dim bg-bg-void px-3 py-2.5 ${mono ? 'font-sans text-[20px] font-bold tracking-[0.4em] text-accent-cyan' : 'font-mono text-[13px] text-text-primary'}`}>
+        {value}
+      </code>
+      <button className="ghost-button inline-flex items-center gap-1" onClick={onCopy}>
+        <Copy size={12} /> Copy
+      </button>
+    </div>
+  </div>
+);
