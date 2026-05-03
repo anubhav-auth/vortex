@@ -11,21 +11,21 @@ export const Tabs = ({ value, onChange, items, className }) => (
           key={item.value}
           onClick={() => onChange(item.value)}
           className={cn(
-            'relative flex items-center gap-2 px-4 py-2.5 font-mono text-[12px] uppercase tracking-[0.15em] transition-colors',
-            active ? 'text-accent-cyan' : 'text-text-secondary hover:text-text-primary',
+            'relative flex items-center gap-2 px-6 py-4 font-mono text-[11px] font-bold uppercase tracking-[0.2em] transition-all',
+            active ? 'text-white' : 'text-white/40 hover:text-white hover:bg-white/5',
           )}
         >
-          {item.icon && <item.icon size={14} />}
+          {item.icon && <item.icon size={16} />}
           <span>{item.label}</span>
           {item.badge != null && (
             <span className={cn(
-              'rounded-full px-1.5 py-0.5 text-[10px] font-bold',
-              active ? 'bg-accent-cyan/15 text-accent-cyan' : 'bg-white/5 text-text-dim',
+              'rounded-none px-1.5 py-0.5 text-[9px] font-black',
+              active ? 'bg-white text-black' : 'bg-white/10 text-white/40',
             )}>
               {item.badge}
             </span>
           )}
-          {active && <span className="absolute inset-x-2 -bottom-px h-px bg-accent-cyan" />}
+          {active && <span className="absolute inset-x-0 -bottom-px h-[2px] bg-white" />}
         </button>
       );
     })}

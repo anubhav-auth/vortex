@@ -47,10 +47,10 @@ export const AdminRegistryPage = () => {
         title="College registry"
         description="Source of truth for verifying student registrations. Bulk-upload via CSV; entries can also be removed individually."
         actions={
-          <div className="flex items-center gap-2">
-            <div className="relative w-64">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-full sm:w-64">
               <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-dim" />
-              <input className="input-glass pl-9" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
+              <input className="input-glass !pl-10" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
             <button className="glow-button inline-flex items-center gap-2" onClick={() => setUploadOpen(true)}>
               <Upload size={12} /> Bulk upload

@@ -120,7 +120,7 @@ export const AdminVerificationPage = () => {
           <div className="relative w-72">
             <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-dim" />
             <input
-              className="input-glass pl-9"
+              className="input-glass !pl-10"
               placeholder="Search name / email / reg #"
               value={search}
               onChange={(e) => setSearch(e.target.value)}

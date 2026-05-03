@@ -36,27 +36,27 @@ export const AdminOverviewPage = () => {
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatTile icon={Users}       label="Registered" value={students.data?.users.length ?? 0} hint={`${pending.data?.users.length ?? 0} awaiting review`} />
-            <StatTile icon={ShieldCheck} label="Verified"   value={verifiedCount} tone="live" />
-            <StatTile icon={Trophy}      label="Qualified Teams" value={qualifiedTeams} tone="cyan" hint={`${finalizedTeams} finalized`} />
+            <StatTile icon={ShieldCheck} label="Verified"   value={verifiedCount} />
+            <StatTile icon={Trophy}      label="Qualified Teams" value={qualifiedTeams} hint={`${finalizedTeams} finalized`} />
             <StatTile icon={Activity}    label="Total Teams" value={teams.data?.teams.length ?? 0} />
           </div>
 
           <div className="mt-8 grid gap-4 lg:grid-cols-3">
             <section className="glass-card flat lg:col-span-2">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="font-sans text-[14px] uppercase tracking-[0.15em]">Round control</h2>
+              <div className="mb-6 flex items-center justify-between">
+                <h2 className="font-sans text-[14px] font-black uppercase tracking-[0.2em] text-white">Round control</h2>
                 <Link to="/admin/rounds" className="ghost-button">Manage</Link>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-4">
                 {['ROUND_1','ROUND_2','ROUND_3'].map((r) => {
                   const state = rounds.data?.control?.[ROUND_FIELD[r]] ?? 'LOCKED';
                   const tone = state === 'UNLOCKED' ? 'live' : state === 'CLOSED' ? 'warn' : 'dim';
                   const Icon = state === 'UNLOCKED' ? Unlock : Lock;
                   return (
-                    <div key={r} className="rounded-[4px] border border-border-dim bg-bg-void p-4 text-center">
-                      <Icon size={18} className="mx-auto mb-2 text-text-dim" />
-                      <div className="font-sans text-[12px] uppercase tracking-[0.15em] text-text-secondary">{r.replace('_',' ')}</div>
-                      <div className="mt-2"><Badge tone={tone} dot>{state}</Badge></div>
+                    <div key={r} className="rounded-none border border-white/5 bg-black p-6 text-center transition-all hover:border-white/20">
+                      <Icon size={20} className="mx-auto mb-3 text-white/40" />
+                      <div className="font-sans text-[11px] font-bold uppercase tracking-[0.2em] text-white/60">{r.replace('_',' ')}</div>
+                      <div className="mt-4"><Badge tone={tone}>{state}</Badge></div>
                     </div>
                   );
                 })}
@@ -64,11 +64,11 @@ export const AdminOverviewPage = () => {
             </section>
 
             <section className="glass-card flat">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="font-sans text-[14px] uppercase tracking-[0.15em]">Rules</h2>
+              <div className="mb-6 flex items-center justify-between">
+                <h2 className="font-sans text-[14px] font-black uppercase tracking-[0.2em] text-white">Rules engine</h2>
                 <Link to="/admin/rules" className="ghost-button">Edit</Link>
               </div>
-              <dl className="space-y-2 font-mono text-[12px]">
+              <dl className="space-y-3 font-mono text-[12px]">
                 <Line label="Min team size" value={rules.data?.rules?.minTeamSize} />
                 <Line label="Max team size" value={rules.data?.rules?.maxTeamSize} />
                 <Line label="Min female"    value={rules.data?.rules?.minFemaleMembers} />
@@ -79,13 +79,22 @@ export const AdminOverviewPage = () => {
             </section>
 
             <section className="glass-card flat lg:col-span-3">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="font-sans text-[14px] uppercase tracking-[0.15em]">Quick links</h2>
+              <div className="mb-6">
+                <h2 className="font-sans text-[14px] font-black uppercase tracking-[0.2em] text-white">Tactical actions</h2>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Link to="/admin/verification" className="ghost-button inline-flex items-center gap-2"><ShieldCheck size={12}/> Review pending ({pending.data?.users.length ?? 0})</Link>
-                <Link to="/admin/teams"        className="ghost-button inline-flex items-center gap-2"><Users size={12}/> Manage teams</Link>
-                <Link to="/admin/broadcast"    className="ghost-button inline-flex items-center gap-2"><Megaphone size={12}/> Send broadcast</Link>
+              <div className="flex flex-wrap gap-3">
+                <Link to="/admin/verification" className="ghost-button inline-flex items-center gap-3 py-3 px-6">
+                  <ShieldCheck size={14}/> 
+                  <span>Review pending ({pending.data?.users.length ?? 0})</span>
+                </Link>
+                <Link to="/admin/teams" className="ghost-button inline-flex items-center gap-3 py-3 px-6">
+                  <Users size={14}/> 
+                  <span>Manage squads</span>
+                </Link>
+                <Link to="/admin/broadcast" className="ghost-button inline-flex items-center gap-3 py-3 px-6">
+                  <Megaphone size={14}/> 
+                  <span>Signal broadcast</span>
+                </Link>
               </div>
             </section>
           </div>
@@ -96,8 +105,8 @@ export const AdminOverviewPage = () => {
 };
 
 const Line = ({ label, value }) => (
-  <div className="flex items-center justify-between">
-    <span className="text-text-dim">{label}</span>
-    <span className="text-text-primary">{value ?? '—'}</span>
+  <div className="flex items-center justify-between border-b border-white/5 pb-2 last:border-0 last:pb-0">
+    <span className="text-white/40 uppercase text-[10px] tracking-wider">{label}</span>
+    <span className="text-white font-bold">{value ?? '—'}</span>
   </div>
 );

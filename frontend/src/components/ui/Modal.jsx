@@ -29,31 +29,31 @@ export const Modal = ({ open, onClose, title, children, size = 'md', footer }) =
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[900] flex items-center justify-center bg-black/70 px-4 py-8 backdrop-blur-sm"
+      className="fixed inset-0 z-[900] flex items-center justify-center bg-black/80 px-4 py-8 backdrop-blur-md"
       onClick={onClose}
     >
       <div
         className={cn(
-          'fade-in relative flex w-full max-h-[88vh] flex-col rounded-[4px] border border-border-dim bg-bg-surface shadow-2xl',
+          'fade-in relative flex w-full max-h-[88vh] flex-col rounded-none border border-white/10 bg-black shadow-[0_0_50px_rgba(0,0,0,0.5)]',
           SIZES[size],
         )}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
-        <div className="flex items-center justify-between border-b border-border-dim px-5 py-3">
-          <h3 className="font-sans text-[14px] uppercase tracking-[0.15em] text-text-primary">{title}</h3>
+        <div className="flex items-center justify-between border-b border-white/5 px-6 py-4 bg-[#050505]">
+          <h3 className="font-sans text-[14px] font-black uppercase tracking-[0.2em] text-white">{title}</h3>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="rounded p-1 text-text-dim hover:bg-white/5 hover:text-text-primary"
+            className="rounded-none p-2 text-white/40 hover:bg-white hover:text-black transition-all"
           >
-            <X size={16} />
+            <X size={20} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        <div className="flex-1 overflow-y-auto px-6 py-6">{children}</div>
         {footer && (
-          <div className="flex items-center justify-end gap-2 border-t border-border-dim px-5 py-3">
+          <div className="flex items-center justify-end gap-3 border-t border-white/5 px-6 py-4 bg-[#050505]">
             {footer}
           </div>
         )}

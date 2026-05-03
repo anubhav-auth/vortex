@@ -45,7 +45,7 @@ export const AdminTeamsPage = () => {
             </select>
             <div className="relative w-64">
               <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-dim" />
-              <input className="input-glass pl-9" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
+              <input className="input-glass !pl-10" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
           </div>
         }

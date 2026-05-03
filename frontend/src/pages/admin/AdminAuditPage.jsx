@@ -36,10 +36,10 @@ export const AdminAuditPage = () => {
         title="Audit log"
         description="Every privileged action that touched the system. Filterable by action and entity type."
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
               <Filter size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-dim" />
-              <select className="select-glass !w-auto pl-9 pr-8" value={action} onChange={(e) => setAction(e.target.value)}>
+              <select className="select-glass !w-auto !pl-10 pr-8" value={action} onChange={(e) => setAction(e.target.value)}>
                 {ACTIONS.map((a) => <option key={a || 'all'} value={a}>{a || 'All actions'}</option>)}
               </select>
             </div>
