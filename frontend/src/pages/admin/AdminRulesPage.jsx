@@ -91,7 +91,7 @@ export const AdminRulesPage = () => {
             </FormField>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 border-t border-border-dim pt-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 border-t border-white/10 pt-4 sm:grid-cols-3">
             <Toggle label="Registration open" value={form.registrationOpen} onChange={set('registrationOpen')} />
             <Toggle label="Leaderboard visible" value={form.leaderboardVisible} onChange={set('leaderboardVisible')} />
             <Toggle label="Show marks" value={form.showMarks} onChange={set('showMarks')} />
@@ -107,8 +107,8 @@ export const AdminRulesPage = () => {
 
         <aside className="glass-card flat space-y-3">
           <div className="flex items-center gap-3">
-            <Settings size={16} className="text-accent-cyan" />
-            <h3 className="font-sans text-[14px] uppercase tracking-[0.15em]">Last recompute</h3>
+            <Settings size={16} className="text-white/40" />
+            <h3 className="font-sans text-[14px] uppercase tracking-[0.15em] text-white">Last recompute</h3>
           </div>
           {recompute ? (
             <div className="space-y-2 font-mono text-[12px]">
@@ -128,9 +128,9 @@ export const AdminRulesPage = () => {
 };
 
 const Toggle = ({ label, value, onChange }) => (
-  <label className="flex cursor-pointer items-center justify-between rounded-[4px] border border-border-dim bg-bg-void px-3 py-2.5">
-    <span className="font-mono text-[11px] uppercase tracking-[0.15em] text-text-secondary">{label}</span>
-    <input type="checkbox" className="h-4 w-4 cursor-pointer accent-accent-cyan" checked={value} onChange={onChange} />
+  <label className="flex cursor-pointer items-center justify-between rounded-none border border-white/10 bg-white/5 px-3 py-2.5">
+    <span className="font-mono text-[11px] uppercase tracking-[0.15em] text-white/60">{label}</span>
+    <input type="checkbox" className="h-4 w-4 cursor-pointer accent-white" checked={value} onChange={onChange} />
   </label>
 );
 

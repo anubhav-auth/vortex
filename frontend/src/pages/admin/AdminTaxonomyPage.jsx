@@ -104,7 +104,7 @@ const ProblemStatementsManager = () => {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <button className="glow-button inline-flex items-center gap-2" onClick={() => setCreating(true)}>
+        <button className="glow-button w-full sm:w-auto inline-flex items-center justify-center gap-2" onClick={() => setCreating(true)}>
           <Plus size={12}/> New problem statement
         </button>
       </div>

@@ -47,6 +47,7 @@ export const AuthProvider = ({ children }) => {
     return u;
   }, []);
 
+
   const logout = useCallback(() => {
     storage.clear();
     disconnectSocket();

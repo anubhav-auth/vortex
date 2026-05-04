@@ -113,21 +113,20 @@ export const AdminVerificationPage = () => {
   return (
     <>
       <PageHeader
-        kicker="Verification Queue"
-        title="Operative review"
+        kicker="VERIFICATION QUEUE"
+        title="OPERATIVE REVIEW"
         description="Approve or reject self-registered students. Verified accounts receive a 6-digit login password by email."
-        actions={
-          <div className="relative w-72">
-            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-dim" />
-            <input
-              className="input-glass !pl-10"
-              placeholder="Search name / email / reg #"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-        }
       />
+
+      <div className="relative mb-8 w-full">
+        <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/20" />
+        <input
+          className="input-glass !h-14 !pl-12 !bg-[#050505] border-white/10 focus:border-white/40"
+          placeholder="Search name / email / reg #"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
 
       {/* ── Stat tiles ─────────────────────────────────────────────────── */}
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -163,10 +162,11 @@ export const AdminVerificationPage = () => {
       )}
 
       {list.length > 0 && (
-        <div className="overflow-hidden rounded-[4px] border border-border-dim bg-bg-surface">
-          <table className="w-full">
+        <div className="overflow-hidden rounded-none border border-white/5 bg-black">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1000px] md:min-w-full">
             <thead>
-              <tr className="border-b border-border-dim text-left">
+              <tr className="border-b border-white/10 text-left">
                 <Th>Operative</Th>
                 <Th>Email</Th>
                 <Th>Reg #</Th>
@@ -179,7 +179,7 @@ export const AdminVerificationPage = () => {
             </thead>
             <tbody>
               {list.map((u) => (
-                <tr key={u.id} className="border-b border-border-dim/60 last:border-0 hover:bg-white/[0.02]">
+                <tr key={u.id} className="border-b border-white/5 last:border-0 hover:bg-white/[0.02]">
                   <td className="px-4 py-3 font-mono text-[12px] text-text-primary">{u.fullName}</td>
                   <td className="px-4 py-3 font-mono text-[12px] text-text-secondary">{u.email}</td>
                   <td className="px-4 py-3 font-mono text-[12px] text-text-secondary">{u.registrationNo ?? '—'}</td>
@@ -225,7 +225,8 @@ export const AdminVerificationPage = () => {
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       )}
 
@@ -292,7 +293,7 @@ const CredentialModal = ({ cred, onClose }) => {
       }
     >
       <div className="space-y-4">
-        <div className="rounded-[4px] border border-status-warn/40 bg-status-warn/5 p-3 font-mono text-[11px] leading-relaxed text-status-warn">
+        <div className="rounded-none border border-white/20 bg-white/5 p-3 font-mono text-[11px] leading-relaxed text-white/60">
           One-shot reveal. The plaintext password is not stored — only its bcrypt hash. Copy or share now; closing this modal discards it from the UI.
         </div>
 
@@ -316,7 +317,7 @@ const CredRow = ({ label, value, onCopy, mono }) => (
   <div>
     <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.15em] text-text-dim">{label}</div>
     <div className="flex items-center gap-2">
-      <code className={`flex-1 select-all rounded-[4px] border border-border-dim bg-bg-void px-3 py-2.5 ${mono ? 'font-sans text-[20px] font-bold tracking-[0.4em] text-accent-cyan' : 'font-mono text-[13px] text-text-primary'}`}>
+      <code className={`flex-1 select-all rounded-none border border-white/10 bg-white/5 px-3 py-2.5 ${mono ? 'font-sans text-[20px] font-bold tracking-[0.4em] text-white' : 'font-mono text-[13px] text-text-primary'}`}>
         {value}
       </code>
       <button className="ghost-button inline-flex items-center gap-1" onClick={onCopy}>

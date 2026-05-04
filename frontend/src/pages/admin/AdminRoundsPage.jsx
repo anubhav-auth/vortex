@@ -38,8 +38,8 @@ export const AdminRoundsPage = () => {
         description="Open or close rounds for jury scoring. Only UNLOCKED rounds accept evaluation submissions."
       />
 
-      <div className="mb-6 flex items-center gap-3 rounded-[4px] border border-status-warn/40 bg-status-warn/5 px-4 py-3 font-mono text-[12px] text-status-warn">
-        <AlertTriangle size={14} />
+      <div className="mb-6 flex items-center gap-3 rounded-none border border-white/20 bg-white/5 px-4 py-3 font-mono text-[12px] text-white/60">
+        <AlertTriangle size={14} className="shrink-0 text-white/40" />
         Only one round should typically be open at a time. The system doesn't enforce this — it's a coordination decision.
       </div>
 
@@ -65,10 +65,10 @@ export const AdminRoundsPage = () => {
                     <button
                       key={s}
                       onClick={() => state !== s && setState(r, s)}
-                      className={`rounded-[4px] border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.1em] ${
+                      className={`rounded-none border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.1em] transition-all ${
                         state === s
-                          ? 'border-accent-cyan bg-accent-cyan/10 text-accent-cyan'
-                          : 'border-border-dim text-text-secondary hover:bg-white/5 hover:text-text-primary'
+                          ? 'border-white bg-white/10 text-white'
+                          : 'border-white/10 text-white/40 hover:bg-white/5 hover:text-white'
                       }`}
                     >
                       {s}

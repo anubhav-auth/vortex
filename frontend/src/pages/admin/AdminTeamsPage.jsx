@@ -35,15 +35,15 @@ export const AdminTeamsPage = () => {
         title="Squad management"
         description="Inspect every team, surface unmet rules, and force-resolve deadlocks (force add/remove, force finalize, disband)."
         actions={
-          <div className="flex items-center gap-2">
-            <select className="select-glass !w-auto" value={status} onChange={(e) => setStatus(e.target.value)}>
+          <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
+            <select className="select-glass w-full md:!w-auto" value={status} onChange={(e) => setStatus(e.target.value)}>
               <option value="">All statuses</option>
               <option value="FORMING">Forming</option>
               <option value="QUALIFIED">Qualified</option>
               <option value="FINALIZED">Finalized</option>
               <option value="DISQUALIFIED">Disqualified</option>
             </select>
-            <div className="relative w-64">
+            <div className="relative w-full md:w-64">
               <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-dim" />
               <input className="input-glass !pl-10" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
@@ -70,7 +70,7 @@ export const AdminTeamsPage = () => {
                 {t.adminOverride && <Badge tone="warn">Override</Badge>}
               </div>
             </div>
-            <div className="flex items-center gap-3 border-t border-border-dim pt-3 font-mono text-[11px]">
+            <div className="flex items-center gap-3 border-t border-white/5 pt-3 font-mono text-[11px]">
               <span className="text-text-dim">{t.memberCount} members</span>
               <span className="text-text-dim">·</span>
               <span className="text-text-dim">{t.femaleCount} F</span>
@@ -130,7 +130,7 @@ const ManageModal = ({ team, onClose, onDone }) => {
   return (
     <Modal open onClose={onClose} title={`Manage ${team.name}`} size="lg">
       <div className="space-y-4">
-        <div className="rounded-[4px] border border-border-dim bg-bg-void p-4">
+        <div className="rounded-none border border-white/10 bg-white/5 p-4">
           <div className="flex items-center justify-between">
             <Badge tone={STATUS_TONE[team.status]} dot>{team.status}</Badge>
             <div className="font-mono text-[11px] text-text-dim">
@@ -176,7 +176,7 @@ const ManageModal = ({ team, onClose, onDone }) => {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 border-t border-border-dim pt-4">
+        <div className="flex flex-wrap gap-2 border-t border-white/10 pt-4">
           <button className="ghost-button inline-flex items-center gap-2"
                   onClick={() => action('Counters recounted.', () => api.post(`/api/admin/teams/${team.id}/recount`))}>
             <RefreshCw size={12}/> Recount counters
