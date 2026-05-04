@@ -47,13 +47,13 @@ export const LoginPage = () => {
           <span className="h-1.5 w-1.5 bg-white" />
           Access Portal
         </div>
-        
+
         <h1 className="text-center font-sans text-[42px] font-black leading-none tracking-tight sm:text-[52px] text-white">
           <ScrambleText text="SIGN IN" duration={0.4} />
         </h1>
-        
+
         <p className="mt-4 text-center font-mono text-[13px] leading-relaxed text-white/40">
-          Vortex Operational Network · v2.0<br/>
+          Vortex Operational Network · v2.0<br />
           Secure authentication required.
         </p>
       </div>
@@ -103,9 +103,9 @@ export const LoginPage = () => {
           )}
 
           <div className="pt-2">
-            <button 
-              type="submit" 
-              disabled={busy} 
+            <button
+              type="submit"
+              disabled={busy}
               className="glow-button h-12 w-full flex items-center justify-center gap-3 font-sans font-black text-[14px] uppercase tracking-widest bg-white text-black hover:bg-[#cccccc] transition-all"
             >
               {busy ? <Spinner size={18} /> : (
@@ -118,9 +118,9 @@ export const LoginPage = () => {
           </div>
         </form>
       </div>
-      
 
-      <div className="mt-10 flex flex-col items-center gap-4">
+
+      <div className="mt-10 flex flex-col items-center gap-6">
         <div className="h-px w-16 bg-white/10" />
         <Link to="/register" className="font-mono text-[11px] uppercase tracking-[0.15em] text-white/40 hover:text-white transition-colors">
           Register here

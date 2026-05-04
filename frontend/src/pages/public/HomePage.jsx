@@ -41,11 +41,11 @@ export const HomePage = () => {
           </Link>
         ) : (
           <>
-            <Link to="/register" className="glow-button flex items-center gap-3 px-8">
+            <Link to="/register" className="glow-button flex w-48 items-center justify-center gap-3">
               <span>Register now</span>
               <ArrowRight size={18} />
             </Link>
-            <Link to="/login" className="ghost-button px-8">Sign in</Link>
+            <Link to="/login" className="ghost-button flex w-48 items-center justify-center">Sign in</Link>
           </>
         )}
       </div>

@@ -37,7 +37,7 @@ const StatusBanner = ({ status, issues }) => {
     );
   }
   return (
-    <div className="space-y-2 rounded-[4px] border border-status-warn/40 bg-status-warn/5 px-4 py-3">
+    <div className="space-y-2 rounded-none border border-white/10 bg-white/5 px-4 py-3">
       <div className="flex items-center gap-3">
         <AlertTriangle size={16} className="text-status-warn" />
         <div className="font-mono text-[12px] text-status-warn">Not yet qualified.</div>
@@ -234,23 +234,23 @@ const InviteModal = ({ open, onClose, teamId, onSent }) => {
         </FormField>
 
         {!registrationNo.trim() && (
-          <Empty
-            icon={Search}
-            title="Search by registration ID"
-            description="Enter a registration number and the matching candidate will appear here."
-            className="rounded-[4px] border border-border-dim bg-bg-void/40 px-4 py-8"
-          />
+            <Empty
+              icon={Search}
+              title="Search by registration ID"
+              description="Enter a registration number and the matching candidate will appear here."
+              className="rounded-none border border-white/10 bg-white/5 px-4 py-8"
+            />
         )}
 
         {registrationNo.trim() && lookup.loading && <CardSkeleton rows={1} />}
 
         {registrationNo.trim() && !lookup.loading && candidates.length === 0 && (
-          <Empty
-            icon={Users}
-            title="No matching candidate"
-            description="No student matched that registration number."
-            className="rounded-[4px] border border-border-dim bg-bg-void/40 px-4 py-8"
-          />
+            <Empty
+              icon={Users}
+              title="No matching candidate"
+              description="No student matched that registration number."
+              className="rounded-none border border-white/10 bg-white/5 px-4 py-8"
+            />
         )}
 
         <div className="space-y-3">
@@ -460,13 +460,13 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
 
         <StatusBanner status={team.status} issues={evaluation?.issues ?? []} />
 
-        <div className="grid grid-cols-3 gap-3 border-t border-border-dim pt-4">
+        <div className="grid grid-cols-3 gap-3 border-t border-white/10 pt-4">
           <Stat label="Members" value={`${team.memberCount}`} />
           <Stat label="Female"  value={`${team.femaleCount}`} />
           <Stat label="Experts" value={`${team.domainExpertCount}`} />
         </div>
 
-        <div className="flex flex-wrap gap-2 border-t border-border-dim pt-4">
+        <div className="flex flex-wrap gap-2 border-t border-white/10 pt-4">
           {isLeader && !isFinalized && (
             <button className="glow-button inline-flex items-center gap-2" onClick={finalize} disabled={team.status !== 'QUALIFIED'}>
               <ShieldCheck size={14} /> Finalize team
@@ -524,7 +524,7 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
             return (
               <article key={m.user.id} className="glass-card flat flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="grid h-10 w-10 place-items-center rounded-[4px] border border-border-dim bg-bg-void font-sans text-[13px] font-bold text-accent-cyan">
+                  <div className="grid h-10 w-10 place-items-center rounded-none border border-white/10 bg-black font-sans text-[13px] font-bold text-white">
                     {(m.user.fullName ?? '?').slice(0, 2).toUpperCase()}
                   </div>
                   <div>
@@ -672,7 +672,7 @@ export const TeamFormationPage = () => {
   };
 
   return (
-    <section className="mx-auto max-w-6xl px-6 py-12">
+    <section className="mx-auto max-w-6xl px-4 sm:px-6 py-8 sm:py-12">
       <PageHeader
         kicker="Team Hub"
         title="Squad formation"

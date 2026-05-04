@@ -48,7 +48,7 @@ const ProfileTab = ({ user }) => (
       )}
 
       {(user.linkedinUrl || user.githubUrl) && (
-        <div className="mt-5 flex items-center gap-3 border-t border-border-dim pt-4">
+        <div className="mt-5 flex items-center gap-3 border-t border-white/10 pt-4">
           {user.linkedinUrl && (
             <a
               href={user.linkedinUrl}
@@ -91,7 +91,7 @@ const ProfileTab = ({ user }) => (
         </Badge>
       </div>
 
-      <div className="space-y-2 border-t border-border-dim pt-3">
+      <div className="space-y-2 border-t border-white/10 pt-3">
         <Link to="/teams" className="glow-button inline-flex w-full items-center justify-center gap-2">
           Team Hub <ArrowRight size={14} />
         </Link>
@@ -102,7 +102,7 @@ const ProfileTab = ({ user }) => (
 
 const Field = ({ icon: Icon, label, value }) => (
   <div className="space-y-1">
-    <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.3em] text-white/30">
+    <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.1em] sm:tracking-[0.3em] text-white/30">
       <Icon size={12} /> {label}
     </div>
     <div className="font-mono text-[13px] font-bold text-white/80">{value}</div>
@@ -269,14 +269,14 @@ const MemberDetailsModal = ({ member, action, busy, onInvite, onClose }) => {
         </div>
 
         {member.bio && (
-          <div className="border-t border-border-dim pt-4">
+          <div className="border-t border-white/10 pt-4">
             <div className="section-label mb-2">Bio</div>
             <p className="font-mono text-[12px] leading-relaxed text-text-secondary">{member.bio}</p>
           </div>
         )}
 
         {(member.linkedinUrl || member.githubUrl) && (
-          <div className="flex flex-wrap gap-2 border-t border-border-dim pt-4">
+          <div className="flex flex-wrap gap-2 border-t border-white/10 pt-4">
             {member.linkedinUrl && (
               <a
                 href={member.linkedinUrl}
@@ -364,7 +364,7 @@ const TeamDetailsModal = ({ team, action, busy, onRequest, onClose }) => {
             <div className="section-label mb-3">Team members</div>
             <div className="grid gap-3 md:grid-cols-2">
               {(fullTeam.members ?? []).map((member) => (
-                <article key={member.user.id} className="rounded-[4px] border border-border-dim bg-bg-void/60 p-3">
+                <article key={member.user.id} className="rounded-none border border-white/10 bg-white/5 p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="font-sans text-[14px] font-bold text-text-primary">{member.user.fullName}</div>
@@ -382,7 +382,7 @@ const TeamDetailsModal = ({ team, action, busy, onRequest, onClose }) => {
             </div>
           </div>
 
-          <div className="border-t border-border-dim pt-4 font-mono text-[11px] text-text-dim">
+          <div className="border-t border-white/10 pt-4 font-mono text-[11px] text-white/30">
             {action?.disabled ? action.label : 'This team is available for join requests.'}
           </div>
         </div>
@@ -733,7 +733,7 @@ export const DashboardPage = () => {
   const u = me.data?.user ?? user;
 
   return (
-    <section className="mx-auto max-w-6xl px-6 py-12">
+    <section className="mx-auto max-w-6xl px-4 sm:px-6 py-8 sm:py-12">
       <PageHeader
         kicker={`Session Active: ${u.fullName.split(' ')[0]}`}
         title="Mission Dashboard"

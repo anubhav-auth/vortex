@@ -33,10 +33,10 @@ export const ProblemStatementsPage = () => {
         title="Problem Statements"
         description="Each team selects one problem statement at team-formation time."
         actions={
-          <div className="relative">
+          <div className="relative w-full md:w-auto">
             <Filter size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-text-dim" />
             <select
-              className="select-glass !w-auto !pl-12 pr-8"
+              className="select-glass w-full md:!w-auto !pl-12 pr-8"
               value={domainFilter}
               onChange={(e) => setDomainFilter(e.target.value)}
             >

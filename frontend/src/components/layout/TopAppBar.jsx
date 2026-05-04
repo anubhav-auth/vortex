@@ -41,19 +41,24 @@ export const TopAppBar = () => {
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-black/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between gap-4 px-6">
-        <Link to="/" onClick={closeMenu} className="flex items-center gap-3 transition-all hover:opacity-70">
+        <Link to="/" onClick={closeMenu} className="flex items-center gap-6 transition-all hover:opacity-70">
           <Infinity size={32} className="text-white" strokeWidth={2.5} />
           <span className="font-sans text-[16px] font-black tracking-[0.3em] text-white">VORTEX</span>
+          {isAuth && user && (
+            <span className="hidden sm:inline font-mono text-[11px] text-white/40 truncate max-w-[120px]">
+              {user.email}
+            </span>
+          )}
         </Link>
 
         {/* Desktop Nav */}
-        <nav className="hidden items-center gap-2 md:flex">
+        <nav className="hidden items-center gap-6 md:flex">
           <NavItem to="/leaderboard">Leaderboard</NavItem>
           <NavItem to="/problem-statements">Problems</NavItem>
           <NavItem to="/awards">Awards</NavItem>
 
           {isAuth ? (
-            <div className="flex items-center gap-2 ml-4 border-l border-white/10 pl-4">
+            <div className="flex items-center gap-6 ml-6 border-l border-white/10 pl-6">
               <NavItem to="/dashboard">Dashboard</NavItem>
               {user.role === 'STUDENT'  && <NavItem to="/teams">Teams</NavItem>}
               {user.role === 'JURY'     && <NavItem to="/jury">Evaluations</NavItem>}

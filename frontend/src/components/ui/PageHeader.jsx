@@ -18,6 +18,6 @@ export const PageHeader = ({ kicker, title, description, actions, className }) =
         <p className="max-w-2xl font-mono text-[13px] leading-relaxed text-white/40">{description}</p>
       )}
     </div>
-    {actions && <div className="flex flex-wrap items-center gap-3">{actions}</div>}
+    {actions && <div className="flex w-full flex-wrap items-center gap-3 md:w-auto">{actions}</div>}
   </header>
 );

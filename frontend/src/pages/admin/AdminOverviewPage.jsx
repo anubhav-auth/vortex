@@ -47,7 +47,7 @@ export const AdminOverviewPage = () => {
                 <h2 className="font-sans text-[14px] font-black uppercase tracking-[0.2em] text-white">Round control</h2>
                 <Link to="/admin/rounds" className="ghost-button">Manage</Link>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 {['ROUND_1','ROUND_2','ROUND_3'].map((r) => {
                   const state = rounds.data?.control?.[ROUND_FIELD[r]] ?? 'LOCKED';
                   const tone = state === 'UNLOCKED' ? 'live' : state === 'CLOSED' ? 'warn' : 'dim';

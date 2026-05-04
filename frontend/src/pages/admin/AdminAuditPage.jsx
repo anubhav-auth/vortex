@@ -36,14 +36,14 @@ export const AdminAuditPage = () => {
         title="Audit log"
         description="Every privileged action that touched the system. Filterable by action and entity type."
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
+          <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
+            <div className="relative w-full md:w-auto">
               <Filter size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-dim" />
-              <select className="select-glass !w-auto !pl-10 pr-8" value={action} onChange={(e) => setAction(e.target.value)}>
+              <select className="select-glass w-full !pl-10 pr-8 md:!w-auto" value={action} onChange={(e) => setAction(e.target.value)}>
                 {ACTIONS.map((a) => <option key={a || 'all'} value={a}>{a || 'All actions'}</option>)}
               </select>
             </div>
-            <input className="input-glass !w-auto" placeholder="Entity type (e.g. Team)" value={entityType} onChange={(e) => setEntityType(e.target.value)} />
+            <input className="input-glass w-full md:w-auto" placeholder="Entity type (e.g. Team)" value={entityType} onChange={(e) => setEntityType(e.target.value)} />
           </div>
         }
       />
@@ -54,16 +54,17 @@ export const AdminAuditPage = () => {
       )}
 
       {data && data.entries.length > 0 && (
-        <div className="overflow-hidden rounded-[4px] border border-border-dim bg-bg-surface">
-          <table className="w-full">
+        <div className="overflow-hidden rounded-none border border-white/5 bg-black">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[800px] md:min-w-full">
             <thead>
-              <tr className="border-b border-border-dim text-left">
+              <tr className="border-b border-white/10 text-left">
                 <Th>When</Th><Th>Action</Th><Th>Entity</Th><Th>Actor</Th><Th>Details</Th>
               </tr>
             </thead>
             <tbody>
               {data.entries.map((e) => (
-                <tr key={e.id} className="border-b border-border-dim/60 last:border-0 hover:bg-white/[0.02]">
+                <tr key={e.id} className="border-b border-white/5 last:border-0 hover:bg-white/[0.02]">
                   <td className="px-4 py-3 font-mono text-[11px] text-text-secondary whitespace-nowrap">{formatDate(e.createdAt)}</td>
                   <td className="px-4 py-3"><Badge tone={ACTION_TONE[e.action] ?? 'dim'}>{e.action}</Badge></td>
                   <td className="px-4 py-3 font-mono text-[11px] text-text-secondary">{e.entityType}{e.entityId ? `:${e.entityId.slice(0,8)}` : ''}</td>
@@ -76,7 +77,8 @@ export const AdminAuditPage = () => {
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       )}
     </>

@@ -70,16 +70,17 @@ export const AdminRegistryPage = () => {
       )}
 
       {data && data.entries.length > 0 && (
-        <div className="overflow-hidden rounded-[4px] border border-border-dim bg-bg-surface">
-          <table className="w-full">
+        <div className="overflow-hidden rounded-none border border-white/5 bg-black">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[800px] md:min-w-full">
             <thead>
-              <tr className="border-b border-border-dim text-left">
+              <tr className="border-b border-white/10 text-left">
                 <Th>Reg #</Th><Th>Name</Th><Th>Email</Th><Th>Institution</Th><Th align="right">Actions</Th>
               </tr>
             </thead>
             <tbody>
               {data.entries.map((e) => (
-                <tr key={e.id} className="border-b border-border-dim/60 last:border-0 hover:bg-white/[0.02]">
+                <tr key={e.id} className="border-b border-white/5 last:border-0 hover:bg-white/[0.02]">
                   <td className="px-4 py-3 font-mono text-[12px] text-text-primary">{e.registrationNo}</td>
                   <td className="px-4 py-3 font-mono text-[12px] text-text-primary">{e.fullName}</td>
                   <td className="px-4 py-3 font-mono text-[12px] text-text-secondary">{e.email}</td>
@@ -92,7 +93,8 @@ export const AdminRegistryPage = () => {
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       )}
 
@@ -146,9 +148,9 @@ const UploadModal = ({ open, onClose, onDone, institutions }) => {
   return (
     <Modal open={open} onClose={onClose} title="Bulk upload registry" size="lg">
       <form onSubmit={submit} className="space-y-4">
-        <div className="rounded-[4px] border border-border-dim bg-bg-void p-3 font-mono text-[11px] text-text-secondary">
-          <div className="mb-1 font-bold uppercase tracking-[0.15em] text-text-dim">Available institutions</div>
-          <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+        <div className="rounded-none border border-white/10 bg-white/5 p-4 font-mono text-[11px] text-text-secondary">
+          <div className="mb-2 font-bold uppercase tracking-[0.2em] text-white/40">Available institutions</div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {institutions.map((i) => (
               <div key={i.id} className="flex justify-between gap-2">
                 <span className="truncate text-text-secondary">{i.name}</span>
