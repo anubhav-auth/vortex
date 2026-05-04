@@ -107,6 +107,29 @@ const ManageModal = ({ team, onClose, onDone }) => {
     catch (err) { toast.error(err.message); }
   };
 
+  // Resolve a registration number → userId then run the underlying action.
+  // Done client-side so we get a precise toast ('No user with that
+  // registration number') instead of the generic backend NotFound.
+  const resolveAndAct = async (registrationNo, label, makeRequest) => {
+    const trimmed = registrationNo.trim();
+    if (!trimmed) return;
+    let user;
+    try {
+      const res = await api.get('/api/admin/verification/lookup', {
+        query: { registrationNo: trimmed },
+      });
+      user = res?.user;
+    } catch (err) {
+      toast.error(err.message);
+      return;
+    }
+    if (!user) {
+      toast.error(`No user with registration # ${trimmed}.`);
+      return;
+    }
+    return action(label, () => makeRequest(user.id));
+  };
+
   const forceFinalize = async () => {
     const ok = await confirm({
       title: `Force-finalize ${team.name}?`,
@@ -149,13 +172,22 @@ const ManageModal = ({ team, onClose, onDone }) => {
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="glass-card flat space-y-3">
             <h3 className="section-label">Force add member</h3>
-            <FormField label="User ID" hint="Bypasses team-full / status guards. Unique constraints still apply.">
-              <input className="input-glass" value={forceAddId} onChange={(e) => setForceAddId(e.target.value)} />
+            <FormField label="Registration #" hint="Bypasses team-full / status guards. Unique constraints still apply.">
+              <input
+                className="input-glass"
+                placeholder="e.g. 2026-VRTX-101"
+                value={forceAddId}
+                onChange={(e) => setForceAddId(e.target.value)}
+              />
             </FormField>
             <button
               className="ghost-button inline-flex items-center gap-2"
               disabled={!forceAddId}
-              onClick={() => action('Member added.', () => api.post(`/api/admin/teams/${team.id}/force-add`, { userId: forceAddId.trim() }))}
+              onClick={() => resolveAndAct(
+                forceAddId,
+                'Member added.',
+                (userId) => api.post(`/api/admin/teams/${team.id}/force-add`, { userId }),
+              )}
             >
               <UserPlus size={12}/> Force add
             </button>
@@ -163,13 +195,22 @@ const ManageModal = ({ team, onClose, onDone }) => {
 
           <div className="glass-card flat space-y-3">
             <h3 className="section-label">Force remove member</h3>
-            <FormField label="User ID" hint="Refused for the team leader (use disband instead).">
-              <input className="input-glass" value={forceRemoveId} onChange={(e) => setForceRemoveId(e.target.value)} />
+            <FormField label="Registration #" hint="Refused for the team leader (use disband instead).">
+              <input
+                className="input-glass"
+                placeholder="e.g. 2026-VRTX-101"
+                value={forceRemoveId}
+                onChange={(e) => setForceRemoveId(e.target.value)}
+              />
             </FormField>
             <button
               className="ghost-button inline-flex items-center gap-2"
               disabled={!forceRemoveId}
-              onClick={() => action('Member removed.', () => api.post(`/api/admin/teams/${team.id}/force-remove`, { userId: forceRemoveId.trim() }))}
+              onClick={() => resolveAndAct(
+                forceRemoveId,
+                'Member removed.',
+                (userId) => api.post(`/api/admin/teams/${team.id}/force-remove`, { userId }),
+              )}
             >
               <UserMinus size={12}/> Force remove
             </button>

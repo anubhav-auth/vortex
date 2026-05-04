@@ -206,6 +206,13 @@ export const userService = {
     });
   },
 
+  findByRegistrationNo(registrationNo) {
+    return prisma.user.findUnique({
+      where: { registrationNo },
+      select: PUBLIC_USER_FIELDS,
+    });
+  },
+
   recordLogin(userId) {
     return prisma.user.update({
       where: { id: userId },

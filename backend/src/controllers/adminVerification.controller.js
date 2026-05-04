@@ -33,6 +33,14 @@ export const listStudents = async (req, res) => {
   res.json({ count: users.length, users });
 };
 
+// Resolve a registration number to its underlying User. Used by admin
+// flows (force-add member, jury assignment) where we want admins to type
+// the human-friendly reg# instead of a cuid.
+export const lookupByRegistrationNo = async (req, res) => {
+  const user = await userService.findByRegistrationNo(req.query.registrationNo);
+  res.json({ user });
+};
+
 export const approve = async (req, res) => {
   const { user, plaintextPassword } = await userService.approveStudent(req.params.id);
 
