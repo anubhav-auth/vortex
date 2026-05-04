@@ -324,6 +324,22 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
   const invites  = useApi(() => api.get(`/api/teams/${team.id}/invites`), [team.id]);
   const requests = useApi(() => api.get(`/api/teams/${team.id}/join-requests`), [team.id]);
 
+  // Membership-change requests I've started — used to swap the "Request to
+  // leave" button for "Cancel leave request" while one is in flight, so
+  // users don't keep clicking and getting 409s.
+  const myChanges = useApi(() => api.get('/api/membership-changes/initiated-me'), []);
+  const myPendingLeave = (myChanges.data?.changes ?? []).find(
+    (c) => c.team?.id === team.id && c.kind === 'LEAVE',
+  );
+
+  // Leader-side: change requests awaiting MY approval (leave requests
+  // from members of this team, plus dismissals where I'm the target —
+  // although as leader I'd never receive a dismissal).
+  const awaitingMe = useApi(() => api.get('/api/membership-changes/awaiting-me'), []);
+  const teamPendingForMe = (awaitingMe.data?.changes ?? []).filter(
+    (c) => c.team?.id === team.id,
+  );
+
   const action = async (label, fn) => {
     try { await fn(); toast.success(label); onMutate(); }
     catch (err) { toast.error(err.message); }
@@ -334,6 +350,22 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
   const approveRequest = (id) => action('Request approved.', () => api.post(`/api/join-requests/${id}/approve`));
   const denyRequest    = (id) => action('Request denied.',   () => api.post(`/api/join-requests/${id}/deny`));
 
+  const approveChange = async (id, kind) => {
+    try {
+      await api.post(`/api/membership-changes/${id}/approve`);
+      toast.success(kind === 'LEAVE' ? 'Member removed.' : 'Dismissal acknowledged.');
+      awaitingMe.refetch();
+      onMutate();
+    } catch (err) { toast.error(err.message); }
+  };
+  const denyChange = async (id) => {
+    try {
+      await api.post(`/api/membership-changes/${id}/deny`);
+      toast.success('Request denied.');
+      awaitingMe.refetch();
+    } catch (err) { toast.error(err.message); }
+  };
+
   const requestLeave = async () => {
     const ok = await confirm({
       title: 'Leave the team?',
@@ -341,7 +373,32 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
       confirmLabel: 'Submit request',
     });
     if (!ok) return;
-    action('Leave request submitted.', () => api.post(`/api/teams/${team.id}/leave`, {}));
+    try {
+      await api.post(`/api/teams/${team.id}/leave`, {});
+      toast.success('Leave request submitted.');
+      myChanges.refetch();
+      onMutate();
+    } catch (err) {
+      toast.error(err.message);
+      // Sync UI in case backend already had a pending one (race / stale tab).
+      myChanges.refetch();
+    }
+  };
+
+  const cancelLeaveRequest = async () => {
+    if (!myPendingLeave) return;
+    const ok = await confirm({
+      title: 'Cancel leave request?',
+      message: 'You\'ll stay a member of the team. You can submit another request later.',
+      confirmLabel: 'Cancel request',
+    });
+    if (!ok) return;
+    try {
+      await api.post(`/api/membership-changes/${myPendingLeave.id}/cancel`);
+      toast.success('Leave request withdrawn.');
+      myChanges.refetch();
+      onMutate();
+    } catch (err) { toast.error(err.message); }
   };
 
   const dismissMember = async (memberId, name) => {
@@ -423,9 +480,18 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
             </button>
           )}
           {!isLeader && !isFinalized && (
-            <button className="danger-button inline-flex items-center gap-2" onClick={requestLeave}>
-              <LogOut size={12} /> Request to leave
-            </button>
+            myPendingLeave ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone="warn" dot>Leave request pending leader approval</Badge>
+                <button className="ghost-button inline-flex items-center gap-2" onClick={cancelLeaveRequest}>
+                  <XCircle size={12} /> Cancel request
+                </button>
+              </div>
+            ) : (
+              <button className="danger-button inline-flex items-center gap-2" onClick={requestLeave}>
+                <LogOut size={12} /> Request to leave
+              </button>
+            )
           )}
         </div>
 
@@ -517,6 +583,38 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
             ))}
           </section>
         </div>
+      )}
+
+      {isLeader && !isFinalized && teamPendingForMe.length > 0 && (
+        <section className="space-y-3">
+          <h3 className="section-label">Membership changes awaiting your approval</h3>
+          <div className="grid gap-3 md:grid-cols-2">
+            {teamPendingForMe.map((c) => (
+              <div key={c.id} className="glass-card flat space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-sans text-[13px] font-bold">{c.target?.fullName}</div>
+                    <div className="font-mono text-[11px] text-text-secondary">
+                      {c.kind === 'LEAVE' ? 'wants to leave the team' : `is being dismissed`}
+                    </div>
+                    {c.reason && (
+                      <div className="mt-1 font-mono text-[11px] text-text-dim">"{c.reason}"</div>
+                    )}
+                  </div>
+                  <Badge tone="warn">{c.kind}</Badge>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button className="ghost-button" onClick={() => denyChange(c.id)}>
+                    <XCircle size={12}/> Deny
+                  </button>
+                  <button className="danger-button" onClick={() => approveChange(c.id, c.kind)}>
+                    <CheckCircle2 size={12}/> Approve
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       <InviteModal open={inviteOpen} onClose={() => setInviteOpen(false)} teamId={team.id} onSent={onMutate} />
