@@ -1,6 +1,7 @@
 import { prisma } from '../config/db.js';
 import { Conflict, Forbidden, NotFound, BadRequest } from '../utils/errors.js';
 import { membershipService } from './membership.service.js';
+import { membershipChangeService } from './membershipChange.service.js';
 import { rulesService } from './rules.service.js';
 
 const TEAM_DETAIL_INCLUDE = {
@@ -212,6 +213,7 @@ export const teamService = {
     return prisma.$transaction(async (tx) => {
       await rulesService.assertTeamMutationsAllowed(tx);
       const team = await membershipService.loadTeamForUpdate(tx, teamId);
+      await membershipChangeService.assertNoActiveTeamDisband(tx, teamId);
       if (team.leaderId !== actorId) throw Forbidden('Only the team leader can finalize');
       if (team.status === 'FINALIZED') throw Conflict('Team is already finalized');
       if (team.status === 'DISQUALIFIED') throw Conflict('Team is disqualified');
@@ -244,14 +246,9 @@ export const teamService = {
   },
 
   async disband({ teamId, actorId }) {
-    return prisma.$transaction(async (tx) => {
-      const team = await membershipService.loadTeamForUpdate(tx, teamId);
-      if (team.leaderId !== actorId) throw Forbidden('Only the team leader can dissolve the team');
-      if (team.status === 'FINALIZED') throw Conflict('Finalized teams cannot be dissolved');
-      if (team.status === 'DISQUALIFIED') throw Conflict('Disqualified teams cannot be dissolved');
-
-      await tx.team.delete({ where: { id: teamId } });
-      return { disbanded: true, teamId };
+    return membershipChangeService.requestDisband({
+      teamId,
+      leaderId: actorId,
     });
   },
 
@@ -270,6 +267,7 @@ export const teamService = {
 
     return prisma.$transaction(async (tx) => {
       await rulesService.assertTeamMutationsAllowed(tx);
+      await membershipChangeService.assertNoActiveTeamDisband(tx, teamId);
       const team = await tx.team.findUnique({
         where: { id: teamId },
         select: { id: true, leaderId: true, status: true },

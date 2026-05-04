@@ -20,27 +20,27 @@ export const requestDismiss = async (req, res) => {
 };
 
 export const approve = async (req, res) => {
-  const change = await membershipChangeService.approve({
+  const result = await membershipChangeService.approve({
     requestId: req.params.changeId,
     actorId:   req.user.id,
   });
-  res.json({ change });
+  res.json(result);
 };
 
 export const deny = async (req, res) => {
-  const change = await membershipChangeService.deny({
+  const result = await membershipChangeService.deny({
     requestId: req.params.changeId,
     actorId:   req.user.id,
   });
-  res.json({ change });
+  res.json(result);
 };
 
 export const cancel = async (req, res) => {
-  const change = await membershipChangeService.cancel({
+  const result = await membershipChangeService.cancel({
     requestId: req.params.changeId,
     actorId:   req.user.id,
   });
-  res.json({ change });
+  res.json(result);
 };
 
 export const listAwaitingMyApproval = async (req, res) => {

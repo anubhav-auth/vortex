@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Users, Plus, UserPlus, Send, ShieldCheck, AlertTriangle, LogOut,
-  UserMinus, Crown, Search, Sparkles, CheckCircle2, XCircle,
+  UserMinus, Crown, Search, CheckCircle2, XCircle,
 } from 'lucide-react';
 import { api } from '../../lib/api.js';
 import { useApi } from '../../hooks/useApi.js';
@@ -179,12 +179,11 @@ const InviteModal = ({ open, onClose, teamId, onSent }) => {
   const [registrationNo, setRegistrationNo] = useState('');
   const [busyId, setBusyId] = useState('');
 
-  useEffect(() => {
-    if (!open) {
-      setRegistrationNo('');
-      setBusyId('');
-    }
-  }, [open]);
+  const close = () => {
+    setRegistrationNo('');
+    setBusyId('');
+    onClose();
+  };
 
   const lookup = useApi(
     () => registrationNo.trim()
@@ -209,7 +208,7 @@ const InviteModal = ({ open, onClose, teamId, onSent }) => {
       await api.post(`/api/teams/${teamId}/invites`, { inviteeId });
       toast.success('Invite sent.');
       onSent?.();
-      onClose();
+      close();
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -218,7 +217,7 @@ const InviteModal = ({ open, onClose, teamId, onSent }) => {
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Invite a member" size="sm">
+    <Modal open={open} onClose={close} title="Invite a member" size="sm">
       <div className="space-y-4">
         <FormField label="Registration ID" required hint="Search by registration number to find the matching candidate.">
           <div className="relative">
@@ -300,7 +299,7 @@ const InviteModal = ({ open, onClose, teamId, onSent }) => {
         </div>
 
         <div className="flex justify-end">
-          <button type="button" className="ghost-button" onClick={onClose}>Close</button>
+          <button type="button" className="ghost-button" onClick={close}>Close</button>
         </div>
       </div>
     </Modal>
@@ -332,9 +331,16 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
     [],
     { pollMs: 5000 },
   );
-  const myPendingLeave = (myChanges.data?.changes ?? []).find(
+  const initiatedChanges = myChanges.data?.changes ?? [];
+  const myPendingLeave = initiatedChanges.find(
     (c) => c.team?.id === team.id && c.kind === 'LEAVE',
   );
+  const myDisbandChanges = initiatedChanges.filter(
+    (c) => c.team?.id === team.id && c.kind === 'DISBAND',
+  );
+  const teamDisbandPending = myDisbandChanges.length > 0;
+  const disbandApprovedCount = myDisbandChanges.filter((c) => c.status === 'APPROVED').length;
+  const disbandPendingCount = myDisbandChanges.filter((c) => c.status === 'PENDING').length;
 
   // Leader-side: change requests awaiting MY approval (leave requests
   // from members of this team, plus dismissals where I'm the target —
@@ -344,8 +350,12 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
     [],
     { pollMs: 5000 },
   );
-  const teamPendingForMe = (awaitingMe.data?.changes ?? []).filter(
-    (c) => c.team?.id === team.id,
+  const myApprovalChanges = awaitingMe.data?.changes ?? [];
+  const myDisbandApproval = myApprovalChanges.find(
+    (c) => c.team?.id === team.id && c.kind === 'DISBAND',
+  );
+  const teamPendingForMe = myApprovalChanges.filter(
+    (c) => c.team?.id === team.id && c.kind !== 'DISBAND',
   );
 
   const action = async (label, fn) => {
@@ -360,17 +370,24 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
 
   const approveChange = async (id, kind) => {
     try {
-      await api.post(`/api/membership-changes/${id}/approve`);
-      toast.success(kind === 'LEAVE' ? 'Member removed.' : 'Dismissal acknowledged.');
+      const res = await api.post(`/api/membership-changes/${id}/approve`);
+      if (kind === 'DISBAND') {
+        toast.success(res.disbanded ? 'Team dissolved.' : 'Dissolution approval recorded.');
+      } else {
+        toast.success(kind === 'LEAVE' ? 'Member removed.' : 'Dismissal acknowledged.');
+      }
+      myChanges.refetch();
       awaitingMe.refetch();
       onMutate();
     } catch (err) { toast.error(err.message); }
   };
-  const denyChange = async (id) => {
+  const denyChange = async (id, kind) => {
     try {
       await api.post(`/api/membership-changes/${id}/deny`);
-      toast.success('Request denied.');
+      toast.success(kind === 'DISBAND' ? 'Dissolution request denied.' : 'Request denied.');
+      myChanges.refetch();
       awaitingMe.refetch();
+      onMutate();
     } catch (err) { toast.error(err.message); }
   };
 
@@ -431,14 +448,43 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
 
   const dissolveTeam = async () => {
     if (dissolveBlockedReason) return;
+    if (teamDisbandPending) {
+      const ok = await confirm({
+        title: 'Cancel dissolve request?',
+        message: 'This keeps the team intact and clears every pending member approval for dissolution.',
+        confirmLabel: 'Cancel request',
+      });
+      if (!ok) return;
+      try {
+        await api.post(`/api/membership-changes/${myDisbandChanges[0].id}/cancel`);
+        toast.success('Dissolution request cancelled.');
+        myChanges.refetch();
+        awaitingMe.refetch();
+        onMutate();
+      } catch (err) { toast.error(err.message); }
+      return;
+    }
+
     const ok = await confirm({
       title: `Dissolve ${team.name}?`,
-      message: 'This deletes the team, its pending invites, join requests, and roster state. This cannot be undone.',
+      message: 'Each non-leader member will receive an approval request. The team will dissolve only after every member approves.',
       tone: 'crit',
-      confirmLabel: 'Dissolve team',
+      confirmLabel: 'Send requests',
     });
     if (!ok) return;
-    action('Team dissolved.', () => api.delete(`/api/teams/${team.id}`));
+
+    try {
+      const res = await api.delete(`/api/teams/${team.id}`);
+      if (res.disbanded) {
+        toast.success('Team dissolved.');
+      } else {
+        const count = res.pendingApprovals ?? 0;
+        toast.success(`Dissolution request sent to ${count} member${count === 1 ? '' : 's'}.`);
+      }
+      myChanges.refetch();
+      awaitingMe.refetch();
+      onMutate();
+    } catch (err) { toast.error(err.message); }
   };
 
   return (
@@ -467,12 +513,12 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
         </div>
 
         <div className="flex flex-wrap gap-2 border-t border-white/10 pt-4">
-          {isLeader && !isFinalized && (
+          {isLeader && !isFinalized && !teamDisbandPending && (
             <button className="glow-button inline-flex items-center gap-2" onClick={finalize} disabled={team.status !== 'QUALIFIED'}>
               <ShieldCheck size={14} /> Finalize team
             </button>
           )}
-          {isLeader && !isFinalized && (
+          {isLeader && !isFinalized && !teamDisbandPending && (
             <button className="ghost-button inline-flex items-center gap-2" onClick={() => setInviteOpen(true)}>
               <UserPlus size={12} /> Invite member
             </button>
@@ -482,12 +528,12 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
               className="danger-button inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
               onClick={dissolveTeam}
               disabled={Boolean(dissolveBlockedReason)}
-              title={dissolveBlockedReason ?? 'Dissolve this team'}
+              title={dissolveBlockedReason ?? (teamDisbandPending ? 'Cancel team dissolution request' : 'Dissolve this team')}
             >
-              <XCircle size={12} /> Dissolve team
+              <XCircle size={12} /> {teamDisbandPending ? 'Cancel dissolve request' : 'Dissolve team'}
             </button>
           )}
-          {!isLeader && !isFinalized && (
+          {!isLeader && !isFinalized && !myDisbandApproval && (
             myPendingLeave ? (
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tone="warn" dot>Leave request pending leader approval</Badge>
@@ -507,6 +553,69 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
           <div className="font-mono text-[11px] text-text-dim">{dissolveBlockedReason}</div>
         )}
       </header>
+
+      {isLeader && teamDisbandPending && (
+        <section className="glass-card flat space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="section-label">Team dissolution pending</h3>
+              <div className="font-mono text-[11px] text-text-secondary">
+                The team will dissolve automatically after every non-leader member approves.
+              </div>
+            </div>
+            <Badge tone="warn">
+              {disbandApprovedCount}/{myDisbandChanges.length} approved
+            </Badge>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {myDisbandChanges.map((c) => (
+              <div key={c.id} className="rounded-none border border-white/10 bg-white/5 px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="font-sans text-[13px] font-bold text-text-primary">{c.target?.fullName}</div>
+                  <Badge tone={c.status === 'APPROVED' ? 'live' : 'warn'}>{c.status}</Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="font-mono text-[11px] text-text-dim">
+            {disbandPendingCount} approval{disbandPendingCount === 1 ? '' : 's'} still pending.
+          </div>
+        </section>
+      )}
+
+      {!isLeader && myDisbandApproval && (
+        <section className="glass-card flat space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="section-label">Team dissolution request</h3>
+              <div className="font-mono text-[11px] text-text-secondary">
+                {myDisbandApproval.status === 'PENDING'
+                  ? 'The leader has requested to dissolve this team. It will be removed only if every non-leader member approves.'
+                  : 'You approved dissolution. Waiting for the remaining approvals.'}
+              </div>
+              {myDisbandApproval.reason && (
+                <div className="mt-1 font-mono text-[11px] text-text-dim">"{myDisbandApproval.reason}"</div>
+              )}
+            </div>
+            <Badge tone={myDisbandApproval.status === 'APPROVED' ? 'live' : 'warn'}>
+              {myDisbandApproval.status === 'APPROVED' ? 'Approved' : 'Approval required'}
+            </Badge>
+          </div>
+
+          {myDisbandApproval.status === 'PENDING' && (
+            <div className="flex justify-end gap-2">
+              <button className="ghost-button" onClick={() => denyChange(myDisbandApproval.id, 'DISBAND')}>
+                <XCircle size={12}/> Deny
+              </button>
+              <button className="danger-button" onClick={() => approveChange(myDisbandApproval.id, 'DISBAND')}>
+                <CheckCircle2 size={12}/> Approve
+              </button>
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="space-y-3">
         <h3 className="section-label">Members</h3>
@@ -536,7 +645,7 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <Badge tone={isThisLeader ? 'cyan' : 'dim'}>{m.role}</Badge>
-                  {isLeader && !isThisLeader && !isFinalized && (
+                  {isLeader && !isThisLeader && !isFinalized && !teamDisbandPending && (
                     memberHasOpenChange ? (
                       <Badge tone="warn">Awaiting your decision ↓</Badge>
                     ) : (
@@ -557,7 +666,7 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
         </div>
       </section>
 
-      {isLeader && !isFinalized && (
+      {isLeader && !isFinalized && !teamDisbandPending && (
         <div className="grid gap-6 lg:grid-cols-2">
           <section className="space-y-3">
             <h3 className="section-label">Pending invites</h3>
@@ -604,7 +713,7 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
         </div>
       )}
 
-      {isLeader && !isFinalized && teamPendingForMe.length > 0 && (
+      {isLeader && !isFinalized && !teamDisbandPending && teamPendingForMe.length > 0 && (
         <section className="space-y-3">
           <h3 className="section-label">Membership changes awaiting your approval</h3>
           <div className="grid gap-3 md:grid-cols-2">
@@ -623,7 +732,7 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
                   <Badge tone="warn">{c.kind}</Badge>
                 </div>
                 <div className="flex justify-end gap-2">
-                  <button className="ghost-button" onClick={() => denyChange(c.id)}>
+                  <button className="ghost-button" onClick={() => denyChange(c.id, c.kind)}>
                     <XCircle size={12}/> Deny
                   </button>
                   <button className="danger-button" onClick={() => approveChange(c.id, c.kind)}>
@@ -650,7 +759,7 @@ const Stat = ({ label, value }) => (
 
 // ── Page entry ────────────────────────────────────────────────────────────
 export const TeamFormationPage = () => {
-  const myTeam = useApi(() => api.get('/api/teams/mine'), []);
+  const myTeam = useApi(() => api.get('/api/teams/mine'), [], { pollMs: 5000 });
 
   // Need full detail (with members) — list is light. Refetch detail when needed.
   const detail = useApi(

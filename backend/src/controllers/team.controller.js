@@ -1,4 +1,5 @@
 import { teamService } from '../services/team.service.js';
+import { membershipChangeService } from '../services/membershipChange.service.js';
 import { rulesService } from '../services/rules.service.js';
 import { auditService } from '../services/audit.service.js';
 import { prisma } from '../config/db.js';
@@ -89,14 +90,14 @@ export const finalize = async (req, res) => {
 };
 
 export const disband = async (req, res) => {
-  const result = await teamService.disband({
+  const result = await membershipChangeService.requestDisband({
     teamId: req.params.id,
-    actorId: req.user.id,
+    leaderId: req.user.id,
   });
   auditService.record({
     actorId: req.user.id, action: 'TEAM_FORCE_MODIFIED',
     entityType: 'Team', entityId: req.params.id,
-    details: { op: 'disbandByLeader' },
+    details: { op: result.disbanded ? 'disbandByLeader' : 'requestDisbandByLeader' },
   });
   res.json(result);
 };

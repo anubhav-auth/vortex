@@ -1,6 +1,7 @@
 import { prisma } from '../config/db.js';
 import { Conflict, Forbidden, NotFound } from '../utils/errors.js';
 import { membershipService } from './membership.service.js';
+import { membershipChangeService } from './membershipChange.service.js';
 import { rulesService } from './rules.service.js';
 
 // User → team join requests.
@@ -16,6 +17,7 @@ export const joinRequestService = {
     return prisma.$transaction(async (tx) => {
       await rulesService.assertTeamMutationsAllowed(tx);
       const team = await membershipService.loadTeamForUpdate(tx, teamId);
+      await membershipChangeService.assertNoActiveTeamDisband(tx, teamId);
       if (team.status === 'FINALIZED') throw Conflict('Team is finalized');
       if (team.status === 'DISQUALIFIED') throw Conflict('Team is disqualified');
 

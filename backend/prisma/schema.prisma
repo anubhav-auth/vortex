@@ -59,6 +59,7 @@ enum JoinRequestStatus {
 enum MembershipChangeKind {
   LEAVE
   DISMISS
+  DISBAND
 }
 
 enum MembershipChangeStatus {
