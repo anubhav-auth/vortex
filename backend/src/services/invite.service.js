@@ -17,6 +17,7 @@ export const inviteService = {
     if (inviterId === inviteeId) throw BadRequest('Cannot invite yourself');
 
     return prisma.$transaction(async (tx) => {
+      await rulesService.assertTeamMutationsAllowed(tx);
       const team = await membershipService.loadTeamForUpdate(tx, teamId);
       if (team.leaderId !== inviterId) throw Forbidden('Only the team leader can invite');
       if (team.status === 'FINALIZED') throw Conflict('Team is finalized');

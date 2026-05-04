@@ -1,5 +1,5 @@
 import { prisma } from '../config/db.js';
-import { NotFound, BadRequest } from '../utils/errors.js';
+import { NotFound, BadRequest, Forbidden } from '../utils/errors.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RULES + QUALIFICATION ENGINE
@@ -58,6 +58,21 @@ export const rulesService = {
   },
 
   invalidate: invalidateCache,
+
+  /**
+   * Throws Forbidden if the global team-lockdown switch is on. Called by
+   * every team-mutation path BEFORE doing any work, inside its own txn so
+   * an admin flipping the switch mid-flight blocks in-progress writes.
+   *
+   * Admin override paths (teamAdmin.service) intentionally do NOT call
+   * this — when locked, only admins can move things.
+   */
+  async assertTeamMutationsAllowed(tx) {
+    const rules = await this.get(tx);
+    if (rules.teamLockdown) {
+      throw Forbidden('Teams are locked by an organizer. No changes allowed.');
+    }
+  },
 
   // ── pure evaluation ─────────────────────────────────────────────────────
   /**

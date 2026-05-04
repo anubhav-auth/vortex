@@ -12,3 +12,7 @@ export const listStudentsQuerySchema = z.object({
   status: z.enum(['PENDING', 'VERIFIED', 'REJECTED', 'REVOKED']).optional(),
   search: z.string().trim().min(1).max(120).optional(),
 });
+
+export const lookupByRegistrationNoQuerySchema = z.object({
+  registrationNo: z.string().trim().min(1).max(50),
+});

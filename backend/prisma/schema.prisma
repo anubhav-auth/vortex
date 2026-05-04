@@ -356,6 +356,12 @@ model HackathonRules {
   registrationOpen   Boolean  @default(true)
   leaderboardVisible Boolean  @default(false)
   showMarks          Boolean  @default(false)
+  // Global "freeze the world" switch. When true, every team-mutation
+  // path (create / invite / accept / join-request / approve / leave /
+  // dismiss / transfer-leadership / finalize) is rejected. Admin
+  // overrides (force-add, force-remove, force-finalize, disband) still
+  // work — by design, only an admin can move things.
+  teamLockdown       Boolean  @default(false)
   updatedAt          DateTime @updatedAt
   updatedById        String?
 }

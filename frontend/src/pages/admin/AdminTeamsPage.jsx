@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Users, Search, Trash2, RefreshCw, ShieldCheck, UserMinus, UserPlus, Settings } from 'lucide-react';
+import { Users, Search, Trash2, RefreshCw, ShieldCheck, UserMinus, UserPlus, Settings, Lock, Unlock } from 'lucide-react';
 import { api } from '../../lib/api.js';
 import { useApi } from '../../hooks/useApi.js';
 import { useToast } from '../../contexts/ToastContext.jsx';
@@ -26,6 +26,31 @@ export const AdminTeamsPage = () => {
     [search, status],
   );
 
+  // Read the global lockdown switch alongside teams so the toggle button
+  // reflects current state without an extra round-trip.
+  const rules = useApi(() => api.get('/api/admin/rules'), []);
+  const locked = rules.data?.rules?.teamLockdown === true;
+  const [busyLock, setBusyLock] = useState(false);
+
+  const toggleLock = async () => {
+    const ok = await confirm({
+      title: locked ? 'Unlock all teams?' : 'Lock all teams?',
+      message: locked
+        ? 'Students will be able to create teams, send invites, finalize, and leave again.'
+        : 'No student can create / invite / accept / join / leave / finalize until you unlock. Admin overrides (force add/remove, force finalize, disband) still work.',
+      tone: locked ? undefined : 'crit',
+      confirmLabel: locked ? 'Unlock' : 'Lock everything',
+    });
+    if (!ok) return;
+    setBusyLock(true);
+    try {
+      await api.put('/api/admin/rules', { teamLockdown: !locked });
+      toast.success(locked ? 'Teams unlocked.' : 'Teams locked.');
+      rules.refetch();
+    } catch (err) { toast.error(err.message); }
+    finally { setBusyLock(false); }
+  };
+
   const refresh = () => teams.refetch();
 
   return (
@@ -36,6 +61,18 @@ export const AdminTeamsPage = () => {
         description="Inspect every team, surface unmet rules, and force-resolve deadlocks (force add/remove, force finalize, disband)."
         actions={
           <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
+            <button
+              type="button"
+              onClick={toggleLock}
+              disabled={busyLock || rules.loading}
+              className={locked ? 'glow-button inline-flex items-center gap-2 w-full md:w-auto' : 'danger-button inline-flex items-center gap-2 w-full md:w-auto'}
+              title={locked ? 'Unlock all teams' : 'Lock all teams'}
+            >
+              {busyLock
+                ? <Spinner size={14} />
+                : locked ? <Unlock size={12} /> : <Lock size={12} />}
+              {locked ? 'Unlock all teams' : 'Lock all teams'}
+            </button>
             <select className="select-glass w-full md:!w-auto" value={status} onChange={(e) => setStatus(e.target.value)}>
               <option value="">All statuses</option>
               <option value="FORMING">Forming</option>
@@ -50,6 +87,13 @@ export const AdminTeamsPage = () => {
           </div>
         }
       />
+
+      {locked && (
+        <div className="mb-4 flex items-center gap-3 rounded-[4px] border border-status-crit/40 bg-status-crit/5 px-4 py-3 font-mono text-[12px] text-status-crit">
+          <Lock size={14} />
+          Teams are locked. Students cannot create / invite / accept / join / leave / finalize. Admin overrides still work.
+        </div>
+      )}
 
       {teams.loading && <CardSkeleton rows={4} />}
       {!teams.loading && teams.data?.teams.length === 0 && (
@@ -107,6 +151,29 @@ const ManageModal = ({ team, onClose, onDone }) => {
     catch (err) { toast.error(err.message); }
   };
 
+  // Resolve a registration number → userId then run the underlying action.
+  // Done client-side so we get a precise toast ('No user with that
+  // registration number') instead of the generic backend NotFound.
+  const resolveAndAct = async (registrationNo, label, makeRequest) => {
+    const trimmed = registrationNo.trim();
+    if (!trimmed) return;
+    let user;
+    try {
+      const res = await api.get('/api/admin/verification/lookup', {
+        query: { registrationNo: trimmed },
+      });
+      user = res?.user;
+    } catch (err) {
+      toast.error(err.message);
+      return;
+    }
+    if (!user) {
+      toast.error(`No user with registration # ${trimmed}.`);
+      return;
+    }
+    return action(label, () => makeRequest(user.id));
+  };
+
   const forceFinalize = async () => {
     const ok = await confirm({
       title: `Force-finalize ${team.name}?`,
@@ -149,13 +216,22 @@ const ManageModal = ({ team, onClose, onDone }) => {
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="glass-card flat space-y-3">
             <h3 className="section-label">Force add member</h3>
-            <FormField label="User ID" hint="Bypasses team-full / status guards. Unique constraints still apply.">
-              <input className="input-glass" value={forceAddId} onChange={(e) => setForceAddId(e.target.value)} />
+            <FormField label="Registration #" hint="Bypasses team-full / status guards. Unique constraints still apply.">
+              <input
+                className="input-glass"
+                placeholder="e.g. 2026-VRTX-101"
+                value={forceAddId}
+                onChange={(e) => setForceAddId(e.target.value)}
+              />
             </FormField>
             <button
               className="ghost-button inline-flex items-center gap-2"
               disabled={!forceAddId}
-              onClick={() => action('Member added.', () => api.post(`/api/admin/teams/${team.id}/force-add`, { userId: forceAddId.trim() }))}
+              onClick={() => resolveAndAct(
+                forceAddId,
+                'Member added.',
+                (userId) => api.post(`/api/admin/teams/${team.id}/force-add`, { userId }),
+              )}
             >
               <UserPlus size={12}/> Force add
             </button>
@@ -163,13 +239,22 @@ const ManageModal = ({ team, onClose, onDone }) => {
 
           <div className="glass-card flat space-y-3">
             <h3 className="section-label">Force remove member</h3>
-            <FormField label="User ID" hint="Refused for the team leader (use disband instead).">
-              <input className="input-glass" value={forceRemoveId} onChange={(e) => setForceRemoveId(e.target.value)} />
+            <FormField label="Registration #" hint="Refused for the team leader (use disband instead).">
+              <input
+                className="input-glass"
+                placeholder="e.g. 2026-VRTX-101"
+                value={forceRemoveId}
+                onChange={(e) => setForceRemoveId(e.target.value)}
+              />
             </FormField>
             <button
               className="ghost-button inline-flex items-center gap-2"
               disabled={!forceRemoveId}
-              onClick={() => action('Member removed.', () => api.post(`/api/admin/teams/${team.id}/force-remove`, { userId: forceRemoveId.trim() }))}
+              onClick={() => resolveAndAct(
+                forceRemoveId,
+                'Member removed.',
+                (userId) => api.post(`/api/admin/teams/${team.id}/force-remove`, { userId }),
+              )}
             >
               <UserMinus size={12}/> Force remove
             </button>
