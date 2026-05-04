@@ -15,11 +15,11 @@ export default defineConfig({
       // Dev convenience — bypasses CORS during `npm run dev`. Production
       // build hits VITE_API_URL directly.
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'http://127.0.0.1:3001',
         changeOrigin: true,
       },
       '/socket.io': {
-        target: 'http://localhost:3001',
+        target: 'http://127.0.0.1:3001',
         ws: true,
         changeOrigin: true,
       },

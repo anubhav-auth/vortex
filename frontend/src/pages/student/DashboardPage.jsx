@@ -19,15 +19,15 @@ import { Spinner } from '../../components/ui/Spinner.jsx';
 import { Modal } from '../../components/ui/Modal.jsx';
 import { formatRelative, titleCase } from '../../utils/format.js';
 
-const ROLE_TONE = { ADMIN: 'warn', JURY: 'cyan', STUDENT: 'live' };
-const EXPLORE_CARD_CLASS = 'glass-card flat min-h-[188px] rounded-[4px] px-5 py-4 transition duration-200 ease-out hover:-translate-y-1 hover:border-accent-cyan/40 hover:bg-white/[0.04] hover:shadow-[0_14px_32px_rgba(6,182,212,0.08)]';
+const ROLE_TONE = { ADMIN: 'crit', JURY: 'cyan', STUDENT: 'live' };
+const EXPLORE_CARD_CLASS = 'glass-card flat min-h-[188px] rounded-none px-5 py-6 transition duration-200 ease-out hover:border-white hover:bg-white/[0.04]';
 
 const ProfileTab = ({ user }) => (
   <div className="grid gap-6 md:grid-cols-3">
     <section className="glass-card flat md:col-span-2">
-      <div className="mb-4 flex items-center gap-3">
-        <User size={16} className="text-accent-cyan" />
-        <h2 className="font-sans text-[14px] uppercase tracking-[0.15em]">Profile</h2>
+      <div className="mb-6 flex items-center gap-3">
+        <User size={18} className="text-white" />
+        <h2 className="font-sans text-[14px] font-black uppercase tracking-[0.2em] text-white">Profile Identity</h2>
       </div>
       <dl className="grid grid-cols-1 gap-y-3 sm:grid-cols-2">
         <Field icon={User} label="Name" value={user.fullName} />
@@ -41,9 +41,9 @@ const ProfileTab = ({ user }) => (
       </dl>
 
       {user.bio && (
-        <div className="mt-5 border-t border-border-dim pt-4">
-          <div className="section-label mb-2">Bio</div>
-          <p className="font-mono text-[13px] leading-relaxed text-text-secondary">{user.bio}</p>
+        <div className="mt-8 border-t border-white/5 pt-6">
+          <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-white/30 mb-3">Bio / Manifesto</div>
+          <p className="font-mono text-[13px] leading-relaxed text-white/60">{user.bio}</p>
         </div>
       )}
 
@@ -73,20 +73,20 @@ const ProfileTab = ({ user }) => (
       )}
     </section>
 
-    <aside className="glass-card flat space-y-4">
-      <div className="flex items-center gap-3">
-        <div className="grid h-12 w-12 place-items-center rounded-[4px] border border-border-dim bg-bg-void font-sans text-[16px] font-bold text-accent-cyan">
+    <aside className="glass-card flat space-y-6">
+      <div className="flex items-center gap-4">
+        <div className="grid h-14 w-14 place-items-center rounded-none border border-white/10 bg-black font-sans text-[18px] font-black text-white">
           {(user.fullName ?? '?').slice(0, 2).toUpperCase()}
         </div>
         <div>
-          <div className="font-sans text-[14px] font-bold">{user.fullName}</div>
-          <Badge tone={ROLE_TONE[user.role]} dot>{user.role}</Badge>
+          <div className="font-sans text-[15px] font-black text-white uppercase">{user.fullName}</div>
+          <Badge tone={ROLE_TONE[user.role]}>{user.role}</Badge>
         </div>
       </div>
 
-      <div className="border-t border-border-dim pt-3">
-        <div className="section-label mb-2">Status</div>
-        <Badge tone={user.verificationStatus === 'VERIFIED' ? 'live' : 'warn'} dot>
+      <div className="border-t border-white/5 pt-4">
+        <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-white/30 mb-3">Status</div>
+        <Badge tone={user.verificationStatus === 'VERIFIED' ? 'live' : 'warn'}>
           {titleCase(user.verificationStatus)}
         </Badge>
       </div>
@@ -101,11 +101,11 @@ const ProfileTab = ({ user }) => (
 );
 
 const Field = ({ icon: Icon, label, value }) => (
-  <div className="space-y-0.5">
-    <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.15em] text-text-dim">
-      <Icon size={11} /> {label}
+  <div className="space-y-1">
+    <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.3em] text-white/30">
+      <Icon size={12} /> {label}
     </div>
-    <div className="font-mono text-[13px] text-text-primary">{value}</div>
+    <div className="font-mono text-[13px] font-bold text-white/80">{value}</div>
   </div>
 );
 
@@ -149,17 +149,17 @@ const InboxTab = () => {
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
-      <section className="space-y-3">
-        <h2 className="section-label">Pending invites</h2>
+      <section className="space-y-4">
+        <h2 className="font-mono text-[11px] font-black uppercase tracking-[0.3em] text-white/40">Pending invites</h2>
         {invites.loading && <CardSkeleton rows={2} />}
         {invites.data?.invites.length === 0 && (
           <Empty icon={Inbox} title="No pending invites" description="Leaders can send you invites from the Teams page." />
         )}
         {invites.data?.invites.map((inv) => (
-          <article key={inv.id} className="glass-card flat space-y-3">
+          <article key={inv.id} className="glass-card flat space-y-4 border-white/10 hover:border-white">
             <div>
-              <div className="font-sans text-[15px] font-bold text-text-primary">{inv.team.name}</div>
-              <div className="font-mono text-[12px] text-text-secondary">
+              <div className="font-sans text-[16px] font-black text-white uppercase tracking-tight">{inv.team.name}</div>
+              <div className="font-mono text-[12px] text-white/40 mt-1">
                 {inv.team.domain?.name} · led by {inv.team.leader?.fullName}
               </div>
             </div>
@@ -200,15 +200,15 @@ const BroadcastsTab = () => {
     return <Empty icon={Megaphone} title="No broadcasts yet" description="Organizer announcements appear here in real time." />;
   }
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {latest.map((b) => (
-        <article key={b.id} className="glass-card flat space-y-2">
+        <article key={b.id} className="glass-card flat space-y-4 border-white/10 hover:border-white">
           <div className="flex items-center justify-between">
-            <Badge tone="cyan" dot>Broadcast</Badge>
-            <span className="font-mono text-[11px] text-text-dim">{formatRelative(b.createdAt)}</span>
+            <Badge tone="live">Signal broadcast</Badge>
+            <span className="font-mono text-[11px] text-white/30">{formatRelative(b.createdAt)}</span>
           </div>
-          <p className="font-mono text-[13px] leading-relaxed text-text-primary">{b.message}</p>
-          <div className="font-mono text-[11px] text-text-dim">- {b.sender?.fullName}</div>
+          <p className="font-mono text-[13px] leading-relaxed text-white/80">{b.message}</p>
+          <div className="font-mono text-[11px] text-white/20 uppercase tracking-widest">- {b.sender?.fullName}</div>
         </article>
       ))}
     </div>
@@ -549,10 +549,10 @@ const ExploreTab = ({ user, myTeam }) => {
             </p>
           </div>
           <div className="relative w-full max-w-xs">
-            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-dim" />
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/20" />
             <input
-              className="input-glass pl-9"
-              placeholder="Search members..."
+              className="input-glass !pl-10 border-white/10 focus:border-white transition-all bg-black"
+              placeholder="Search operatives..."
               value={memberFilter}
               onChange={(e) => setMemberFilter(e.target.value)}
             />
@@ -635,9 +635,9 @@ const ExploreTab = ({ user, myTeam }) => {
             </p>
           </div>
           <div className="relative w-full max-w-xs">
-            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-dim" />
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/20" />
             <input
-              className="input-glass pl-9"
+              className="input-glass !pl-10 border-white/10 focus:border-white transition-all bg-black"
               placeholder="Search teams..."
               value={teamFilter}
               onChange={(e) => setTeamFilter(e.target.value)}
@@ -735,12 +735,12 @@ export const DashboardPage = () => {
   return (
     <section className="mx-auto max-w-6xl px-6 py-12">
       <PageHeader
-        kicker={`Welcome, ${u.fullName.split(' ')[0]}`}
-        title="Dashboard"
-        description="Your profile, team status, inbox and live announcements."
+        kicker={`Session Active: ${u.fullName.split(' ')[0]}`}
+        title="Mission Dashboard"
+        description="Your profile, team status, inbox and live signals."
         actions={
           u.role === 'STUDENT'
-            ? <Link to="/teams" className="ghost-button inline-flex items-center gap-2"><Users size={12} /> Team Hub <ExternalLink size={12} /></Link>
+            ? <Link to="/teams" className="glow-button inline-flex items-center gap-2 px-6"><Users size={14} /> <span>Team Hub</span></Link>
             : null
         }
       />

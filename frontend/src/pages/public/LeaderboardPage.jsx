@@ -48,43 +48,45 @@ export const LeaderboardPage = () => {
       )}
 
       {data && data.entries.length > 0 && (
-        <div className="overflow-hidden rounded-[4px] border border-border-dim bg-bg-surface">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border-dim text-left">
-                <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-[0.15em] text-text-dim">Rank</th>
-                <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-[0.15em] text-text-dim">Team</th>
-                <th className="px-4 py-3 font-mono text-[10px] uppercase tracking-[0.15em] text-text-dim">Domain</th>
-                <th className="hidden px-4 py-3 font-mono text-[10px] uppercase tracking-[0.15em] text-text-dim md:table-cell">Problem</th>
-                <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-[0.15em] text-text-dim">R1</th>
-                <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-[0.15em] text-text-dim">R2</th>
-                <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-[0.15em] text-text-dim">R3</th>
-                <th className="px-4 py-3 text-right font-mono text-[10px] uppercase tracking-[0.15em] text-accent-cyan">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.entries.map((e) => (
-                <tr key={e.team.id} className="border-b border-border-dim/60 last:border-0 hover:bg-white/[0.02]">
-                  <td className="px-4 py-3">
-                    <Badge tone={RANK_TONE(e.rank)}>#{e.rank ?? '—'}</Badge>
-                  </td>
-                  <td className="px-4 py-3 font-mono text-[13px] text-text-primary">{e.team.name}</td>
-                  <td className="px-4 py-3 font-mono text-[12px] text-text-secondary">{e.team.domain.name}</td>
-                  <td className="hidden px-4 py-3 font-mono text-[12px] text-text-secondary md:table-cell">
-                    {e.team.problemStatement?.title ?? '—'}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-[13px]">{data.showMarks ? (e.r1Score ?? '—') : '••'}</td>
-                  <td className="px-4 py-3 text-right font-mono text-[13px]">{data.showMarks ? (e.r2Score ?? '—') : '••'}</td>
-                  <td className="px-4 py-3 text-right font-mono text-[13px]">{data.showMarks ? (e.r3Score ?? '—') : '••'}</td>
-                  <td className="px-4 py-3 text-right font-mono text-[14px] font-bold text-accent-cyan">
-                    {data.showMarks ? (e.finalScore ?? '—') : '••'}
-                  </td>
+        <div className="overflow-hidden rounded-none border border-white/5 bg-black">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[600px] md:min-w-full">
+              <thead>
+                <tr className="border-b border-white/10 text-left">
+                  <th className="px-4 py-4 font-mono text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Rank</th>
+                  <th className="px-4 py-4 font-mono text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Team</th>
+                  <th className="hidden px-4 py-4 font-mono text-[10px] font-black uppercase tracking-[0.2em] text-white/40 sm:table-cell">Domain</th>
+                  <th className="hidden px-4 py-4 font-mono text-[10px] font-black uppercase tracking-[0.2em] text-white/40 md:table-cell">Problem</th>
+                  <th className="px-4 py-4 text-right font-mono text-[10px] font-black uppercase tracking-[0.2em] text-white/40">R1</th>
+                  <th className="px-4 py-4 text-right font-mono text-[10px] font-black uppercase tracking-[0.2em] text-white/40">R2</th>
+                  <th className="px-4 py-4 text-right font-mono text-[10px] font-black uppercase tracking-[0.2em] text-white/40">R3</th>
+                  <th className="px-4 py-4 text-right font-mono text-[10px] font-black uppercase tracking-[0.2em] text-white">Total</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.entries.map((e) => (
+                  <tr key={e.team.id} className="border-b border-white/5 last:border-0 hover:bg-white/[0.03] transition-colors">
+                    <td className="px-4 py-4">
+                      <Badge tone={RANK_TONE(e.rank)}>#{e.rank ?? '—'}</Badge>
+                    </td>
+                    <td className="px-4 py-4 font-sans text-[14px] font-black text-white whitespace-nowrap uppercase tracking-tight">{e.team.name}</td>
+                    <td className="hidden px-4 py-4 font-mono text-[12px] text-white/40 sm:table-cell whitespace-nowrap">{e.team.domain.name}</td>
+                    <td className="hidden px-4 py-4 font-mono text-[12px] text-white/40 md:table-cell">
+                      {e.team.problemStatement?.title ?? '—'}
+                    </td>
+                    <td className="px-4 py-4 text-right font-mono text-[13px] text-white/60">{data.showMarks ? (e.r1Score ?? '—') : '••'}</td>
+                    <td className="px-4 py-4 text-right font-mono text-[13px] text-white/60">{data.showMarks ? (e.r2Score ?? '—') : '••'}</td>
+                    <td className="px-4 py-4 text-right font-mono text-[13px] text-white/60">{data.showMarks ? (e.r3Score ?? '—') : '••'}</td>
+                    <td className="px-4 py-4 text-right font-mono text-[15px] font-black text-white">
+                      {data.showMarks ? (e.finalScore ?? '—') : '••'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           {!data.showMarks && (
-            <div className="border-t border-border-dim bg-bg-void/50 px-4 py-2 text-center font-mono text-[10px] uppercase tracking-[0.15em] text-text-dim">
+            <div className="border-t border-white/5 bg-white/[0.02] px-4 py-3 text-center font-mono text-[10px] uppercase tracking-[0.3em] text-white/30">
               Marks hidden by organizers — ranks only
             </div>
           )}

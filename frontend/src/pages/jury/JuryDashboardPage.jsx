@@ -287,7 +287,7 @@ export const JuryDashboardPage = () => {
         actions={
           <div className="relative w-72">
             <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-dim" />
-            <input className="input-glass pl-9" placeholder="Filter team / domain / PS…" value={filter} onChange={(e) => setFilter(e.target.value)} />
+            <input className="input-glass !pl-10" placeholder="Filter team / domain / PS…" value={filter} onChange={(e) => setFilter(e.target.value)} />
           </div>
         }
       />

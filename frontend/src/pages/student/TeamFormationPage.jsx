@@ -139,7 +139,7 @@ const JoinableList = () => {
         <h2 className="section-label">Open teams</h2>
         <div className="relative w-full max-w-xs">
           <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-dim" />
-          <input className="input-glass pl-9" placeholder="Filter by name…" value={filter} onChange={(e) => setFilter(e.target.value)} />
+          <input className="input-glass !pl-10" placeholder="Filter by name…" value={filter} onChange={(e) => setFilter(e.target.value)} />
         </div>
       </div>
       {loading && <CardSkeleton rows={2} />}
@@ -224,7 +224,7 @@ const InviteModal = ({ open, onClose, teamId, onSent }) => {
           <div className="relative">
             <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-dim" />
             <input
-              className="input-glass pl-9"
+              className="input-glass !pl-10"
               required
               value={registrationNo}
               onChange={(e) => setRegistrationNo(e.target.value)}
