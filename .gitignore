@@ -43,3 +43,7 @@ Desktop.ini
 .docker/
 PRD.md
 *.md
+# Whitelist intentional documentation
+!README.md
+!DEPLOY.md
+!CREDENTIALS.md

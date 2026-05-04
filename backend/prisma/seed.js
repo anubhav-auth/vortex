@@ -1,273 +1,240 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import bcrypt from 'bcrypt';
 import 'dotenv/config';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Idempotent seed.
+//
+// Every write is an upsert keyed on a stable natural identifier (email, name,
+// registrationNo) or on a fixed singleton id. Running this script twice is
+// safe and converges to the same state.
+//
+// What it seeds:
+//   - HackathonRules singleton (id="rules")
+//   - RoundControl singleton (id="round_control") — all rounds LOCKED
+//   - Admin user (env-driven credentials, dev defaults)
+//   - 3 Jury users (deterministic dev passwords)
+//   - 5 Institutions, 5 Domains, 10 ProblemStatements
+//   - 8 sample CollegeRegistry rows (so admin verification flow is testable)
+//
+// What it does NOT seed:
+//   - Students (registration is the user-facing flow)
+//   - Teams, evaluations, leaderboard (downstream of student/jury actions)
+// ─────────────────────────────────────────────────────────────────────────────
+
 const adapter = new PrismaPg(process.env.DATABASE_URL);
+const prisma = new PrismaClient({ adapter });
 
-const prisma = new PrismaClient({
-  adapter,
-});
+const log = (msg) => console.log(`[seed] ${msg}`);
 
-// Placeholder transparent 1x1 base64 pixel to avoid empty photos
-const PLACEHOLDER_PHOTO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+const ROUNDS = parseInt(process.env.BCRYPT_ROUNDS ?? '12', 10);
+const ADMIN_EMAIL = process.env.ADMIN_SEED_EMAIL ?? 'admin@vortex.local';
+const ADMIN_PASSWORD = process.env.ADMIN_SEED_PASSWORD ?? 'change-me-on-first-login';
 
-async function main() {
-  console.log('--- DATABASE_CLEANUP_INITIALIZED ---');
-  await prisma.scoreEntry.deleteMany({});
-  await prisma.evaluation.deleteMany({});
-  await prisma.evaluationCriteria.deleteMany({});
-  await prisma.joinRequest.deleteMany({});
-  await prisma.leaderboard.deleteMany({});
-  await prisma.teamMember.deleteMany({});
-  await prisma.team.deleteMany({});
-  await prisma.problemStatement.deleteMany({});
-  await prisma.student.deleteMany({});
-  await prisma.domain.deleteMany({});
-  await prisma.institute.deleteMany({});
-  await prisma.globalConfig.deleteMany({});
+const JURY_DEFAULT_PASSWORD = process.env.JURY_SEED_PASSWORD ?? 'jury-dev-only';
 
-  console.log('--- SEEDING_GLOBAL_CONFIG ---');
-  await prisma.globalConfig.create({
-    data: {
-      id: 'vortex_config',
-      lockdownActive: false,
-      leaderboardVisible: true,
-      leaderboardLimit: 50,
-      showMarks: true,
-      minTeamMembers: 2,
-      maxTeamMembers: 5,
+// ── singletons ──────────────────────────────────────────────────────────────
+
+const seedRules = async () => {
+  const rules = await prisma.hackathonRules.upsert({
+    where: { id: 'rules' },
+    update: {}, // never overwrite admin's hand-tuned values
+    create: {
+      id: 'rules',
+      minTeamSize: 3,
+      maxTeamSize: 5,
       minFemaleMembers: 1,
       minDomainExperts: 1,
+      registrationOpen: true,
+      leaderboardVisible: false,
+      showMarks: false,
     },
   });
+  log(`HackathonRules ready (id=${rules.id})`);
+};
 
-  console.log('--- SEEDING_INSTITUTIONS ---');
-  const institutes = await Promise.all([
-    { name: 'Institute of Technology, Delhi' },
-    { name: 'MIT World Peace University' },
-    { name: 'Stanford Engineering' },
-    { name: 'BITS Pilani' },
-    { name: 'SRM Institute' }
-  ].map(data => prisma.institute.create({ data })));
+const seedRoundControl = async () => {
+  const rc = await prisma.roundControl.upsert({
+    where: { id: 'round_control' },
+    update: {},
+    create: {
+      id: 'round_control',
+      round1State: 'LOCKED',
+      round2State: 'LOCKED',
+      round3State: 'LOCKED',
+    },
+  });
+  log(`RoundControl ready (id=${rc.id})`);
+};
 
-  console.log('--- SEEDING_DOMAINS ---');
-  const domains = await Promise.all([
-    { name: 'Cybersecurity' },
-    { name: 'Artificial Intelligence' },
-    { name: 'Blockchain' },
-    { name: 'IoT & Robotics' },
-    { name: 'FinTech' }
-  ].map(data => prisma.domain.create({ data })));
+// ── taxonomy ────────────────────────────────────────────────────────────────
 
-  console.log('--- SEEDING_EVALUATION_CRITERIA ---');
-  const criteria = await Promise.all([
-    { name: 'Innovation & Novelty', maxMarks: 10 },
-    { name: 'Technical Complexity', maxMarks: 10 },
-    { name: 'Feasibility & Scalability', maxMarks: 10 },
-    { name: 'Impact & Utility', maxMarks: 10 },
-    { name: 'Presentation & UI/UX', maxMarks: 10 }
-  ].map(data => prisma.evaluationCriteria.create({ data })));
+const INSTITUTIONS = [
+  'Institute of Technology, Delhi',
+  'MIT World Peace University',
+  'BITS Pilani',
+  'SRM Institute',
+  'IIIT Hyderabad',
+];
 
-  console.log('--- SEEDING_PROBLEM_STATEMENTS ---');
-  const allPS = [];
-  const psDescriptions = [
-    "Develop a zero-trust architecture for securing IoT devices in smart cities.",
-    "Implement an AI-driven predictive maintenance system for autonomous fleets.",
-    "Build a decentralized identity platform for cross-border financial transactions.",
-    "Optimize real-time supply chain logistics using computer vision and robotics.",
-    "Create a privacy-preserving credit scoring model using federated learning."
-  ];
+const DOMAINS = [
+  'Cybersecurity',
+  'Artificial Intelligence',
+  'Blockchain',
+  'IoT & Robotics',
+  'FinTech',
+];
 
-  for (const [index, domain] of domains.entries()) {
-    for (let i = 1; i <= 3; i++) {
-      const ps = await prisma.problemStatement.create({
-        data: {
-          title: `${domain.name} Challenge ${i}: ${['Alpha', 'Beta', 'Gamma'][i-1]}`,
-          description: psDescriptions[index % psDescriptions.length],
-          domainId: domain.id
-        }
-      });
-      allPS.push(ps);
+const PROBLEM_STATEMENTS = [
+  ['Cybersecurity',           'Zero-trust architecture for smart cities',
+                              'Design and prototype a zero-trust framework for IoT devices in municipal networks.'],
+  ['Cybersecurity',           'Phishing-resistant SSO for student portals',
+                              'Build a passkey-based SSO with attested device binding.'],
+  ['Artificial Intelligence', 'Predictive maintenance for autonomous fleets',
+                              'Use telemetry to predict component failures with quantified uncertainty.'],
+  ['Artificial Intelligence', 'On-device speech-to-action assistant',
+                              'Latency-bounded NLU for low-power edge devices.'],
+  ['Blockchain',              'Decentralized identity for cross-border KYC',
+                              'A privacy-preserving DID system with selective disclosure.'],
+  ['Blockchain',              'Programmable carbon credits',
+                              'Tokenize carbon offsets with verifiable retirement events.'],
+  ['IoT & Robotics',          'Real-time supply-chain optimization with CV',
+                              'Computer-vision-driven warehouse routing under congestion.'],
+  ['IoT & Robotics',          'Disaster-response micro-drone swarm',
+                              'Autonomous coordination for search-and-locate in GPS-denied zones.'],
+  ['FinTech',                 'Privacy-preserving credit scoring',
+                              'Federated learning across lenders with differential privacy.'],
+  ['FinTech',                 'Real-time fraud detection at POS',
+                              'Sub-100ms decisioning with explainable reason codes.'],
+];
+
+const seedTaxonomy = async () => {
+  for (const name of INSTITUTIONS) {
+    await prisma.institution.upsert({ where: { name }, update: {}, create: { name } });
+  }
+  log(`Institutions: ${INSTITUTIONS.length} ensured`);
+
+  for (const name of DOMAINS) {
+    await prisma.domain.upsert({ where: { name }, update: {}, create: { name } });
+  }
+  log(`Domains: ${DOMAINS.length} ensured`);
+
+  // ProblemStatement has no natural unique key → look up by (title, domainId)
+  // and create only if absent. Safe to re-run.
+  const domainByName = Object.fromEntries(
+    (await prisma.domain.findMany()).map((d) => [d.name, d.id]),
+  );
+
+  for (const [domainName, title, description] of PROBLEM_STATEMENTS) {
+    const domainId = domainByName[domainName];
+    if (!domainId) continue;
+    const existing = await prisma.problemStatement.findFirst({
+      where: { title, domainId },
+      select: { id: true },
+    });
+    if (!existing) {
+      await prisma.problemStatement.create({ data: { title, description, domainId } });
     }
   }
+  log(`ProblemStatements: ${PROBLEM_STATEMENTS.length} ensured`);
+};
 
-  console.log('--- SEEDING_ADMIN_AND_JURY_ACCOUNTS ---');
-  await prisma.student.create({
-    data: {
-      fullName: 'Vortex Admin',
-      rollNumber: 'ADM-001',
-      email: 'admin@vortex.com',
-      password: 'admin123',
-      role: 'ADMIN',
+// ── users ──────────────────────────────────────────────────────────────────
+
+const upsertPrivilegedUser = async ({ email, fullName, role, password }) => {
+  const passwordHash = await bcrypt.hash(password, ROUNDS);
+  return prisma.user.upsert({
+    where: { email },
+    update: {}, // do not reset password on re-seed; admin can rotate via API
+    create: {
+      email,
+      fullName,
+      role,
       verificationStatus: 'VERIFIED',
-      otpVerified: true,
-      photo: PLACEHOLDER_PHOTO
+      passwordHash,
+      passwordIssuedAt: new Date(),
     },
+    select: { id: true, email: true, role: true },
   });
+};
 
-  const jury = await prisma.student.create({
-    data: {
-      fullName: 'Chief Jury Alpha',
-      rollNumber: 'JRY-001',
-      email: 'jury@vortex.com',
-      password: 'password123',
+const seedAdmin = async () => {
+  const admin = await upsertPrivilegedUser({
+    email: ADMIN_EMAIL,
+    fullName: 'Vortex Admin',
+    role: 'ADMIN',
+    password: ADMIN_PASSWORD,
+  });
+  log(`Admin ready (${admin.email})`);
+  if (ADMIN_PASSWORD === 'change-me-on-first-login') {
+    log('  ⚠ using default admin password — set ADMIN_SEED_PASSWORD in .env');
+  }
+};
+
+const JURY_SPECS = [
+  { email: 'jury.alpha@vortex.local',  fullName: 'Jury Alpha'  },
+  { email: 'jury.bravo@vortex.local',  fullName: 'Jury Bravo'  },
+  { email: 'jury.charlie@vortex.local',fullName: 'Jury Charlie'},
+];
+
+const seedJuries = async () => {
+  for (const spec of JURY_SPECS) {
+    await upsertPrivilegedUser({
+      ...spec,
       role: 'JURY',
-      verificationStatus: 'VERIFIED',
-      otpVerified: true,
-      photo: PLACEHOLDER_PHOTO
-    },
-  });
-
-  console.log('--- SEEDING_PARTICIPANTS ---');
-  const students = [];
-  const names = [
-    "Alice Vance", "Bob Smith", "Charlie Day", "Diana Prince", "Ethan Hunt", 
-    "Fiona Gallager", "George Costanza", "Hannah Abbott", "Ian Wright", "Julia Roberts",
-    "Kevin Hart", "Luna Lovegood", "Miles Morales", "Nina Simone", "Oscar Isaac",
-    "Peter Parker", "Quinn Fabray", "Riley Reid", "Sarah Connor", "Tony Stark",
-    "Uma Thurman", "Victor Stone", "Wanda Maximoff", "Xavier Woods", "Yara Shahidi",
-    "Zoe Saldana", "Arthur Morgan", "Billie Eilish", "Cillian Murphy", "David Bowie"
-  ];
-
-  for (let i = 0; i < names.length; i++) {
-    const inst = institutes[i % institutes.length];
-    const dom = domains[i % domains.length];
-    const ps = allPS[Math.floor(Math.random() * allPS.length)];
-    
-    const student = await prisma.student.create({
-      data: {
-        fullName: names[i],
-        rollNumber: `2026-VRTX-${(i + 100).toString()}`,
-        email: `${names[i].toLowerCase().replace(' ', '.')}@vortex.com`,
-        phone: `+91 ${Math.floor(6000000000 + Math.random() * 3999999999)}`,
-        password: `password123`,
-        summary: `Participant specializing in ${dom.name}. Ready for hackathon participation from ${inst.name}.`,
-        role: 'STUDENT',
-        gender: i % 3 === 0 ? 'Female' : 'Male', // Increased female ratio slightly for seeding
-        instituteId: inst.id,
-        domainId: dom.id,
-        psId: ps.id,
-        verificationStatus: i % 10 === 0 ? 'PENDING' : 'VERIFIED', // Fewer pending for better team formation
-        otpVerified: true,
-        photo: PLACEHOLDER_PHOTO
-      },
+      password: JURY_DEFAULT_PASSWORD,
     });
-    students.push(student);
   }
+  log(`Juries: ${JURY_SPECS.length} ensured (default password: ${JURY_DEFAULT_PASSWORD})`);
+};
 
-  console.log('--- SEEDING_TEAMS ---');
-  const verifiedStudents = students.filter(s => s.verificationStatus === 'VERIFIED');
-  const studentsInTeams = new Set();
-  
-  const teamNames = ["Shadow", "Vanguard", "Nebula", "Titan", "Phantom", "Rogue"];
-  
-  for (let i = 0; i < teamNames.length; i++) {
-    const ps = allPS[i % allPS.length];
-    // Pick a leader who matches the PS domain
-    const potentialLeaders = verifiedStudents.filter(s => 
-      s.psId === ps.id && 
-      s.domainId === ps.domainId && 
-      !studentsInTeams.has(s.id)
-    );
-    
-    const leader = potentialLeaders[0] || verifiedStudents.find(s => !studentsInTeams.has(s.id));
-    if (!leader) break;
+// ── registry ────────────────────────────────────────────────────────────────
 
-    studentsInTeams.add(leader.id);
+const REGISTRY_SAMPLES = [
+  ['2026-VRTX-100', 'Alice Vance',     'alice.vance@vortex.local',     'BITS Pilani'],
+  ['2026-VRTX-101', 'Bob Smith',       'bob.smith@vortex.local',       'BITS Pilani'],
+  ['2026-VRTX-102', 'Carla Mendes',    'carla.mendes@vortex.local',    'IIIT Hyderabad'],
+  ['2026-VRTX-103', 'Devraj Patil',    'devraj.patil@vortex.local',    'IIIT Hyderabad'],
+  ['2026-VRTX-104', 'Esha Nair',       'esha.nair@vortex.local',       'MIT World Peace University'],
+  ['2026-VRTX-105', 'Farhan Iqbal',    'farhan.iqbal@vortex.local',    'MIT World Peace University'],
+  ['2026-VRTX-106', 'Gita Roy',        'gita.roy@vortex.local',        'SRM Institute'],
+  ['2026-VRTX-107', 'Hari Menon',      'hari.menon@vortex.local',      'Institute of Technology, Delhi'],
+];
 
-    const isFemale = leader.gender === 'Female';
-    const isDomainExpert = leader.domainId === ps.domainId;
+const seedRegistry = async () => {
+  const instByName = Object.fromEntries(
+    (await prisma.institution.findMany()).map((i) => [i.name, i.id]),
+  );
 
-    const team = await prisma.team.create({
-      data: {
-        teamName: `${teamNames[i]} Team`,
-        psId: ps.id,
-        leaderId: leader.id,
-        teamStatus: 'FORMING',
-        memberCount: 1,
-        femaleCount: isFemale ? 1 : 0,
-        domainSpecificCount: isDomainExpert ? 1 : 0
-      },
+  for (const [registrationNo, fullName, email, institutionName] of REGISTRY_SAMPLES) {
+    const institutionId = instByName[institutionName];
+    if (!institutionId) continue;
+    await prisma.collegeRegistry.upsert({
+      where: { registrationNo },
+      update: { fullName, email, institutionId },
+      create: { registrationNo, fullName, email, institutionId },
     });
-
-    await prisma.teamMember.create({
-      data: { teamId: team.id, studentId: leader.id, role: 'Leader' },
-    });
-
-    await prisma.student.update({
-      where: { id: leader.id },
-      data: { role: 'TEAMLEAD' }
-    });
-
-    // Strategy to fill team correctly:
-    // 1. Add another domain expert if possible
-    // 2. Add female member if leader isn't female
-    // 3. Add more members until 4 or 5
-    
-    const potentialMates = verifiedStudents.filter(s => 
-      s.psId === ps.id && 
-      s.id !== leader.id && 
-      !studentsInTeams.has(s.id)
-    );
-
-    // Sort to prioritize domain experts and females
-    potentialMates.sort((a, b) => {
-      const aScore = (a.domainId === ps.domainId ? 2 : 0) + (a.gender === 'Female' ? 1 : 0);
-      const bScore = (b.domainId === ps.domainId ? 2 : 0) + (b.gender === 'Female' ? 1 : 0);
-      return bScore - aScore;
-    });
-
-    const matesToAdd = potentialMates.slice(0, 4); // Aim for 5 total if possible
-    for (const mate of matesToAdd) {
-      studentsInTeams.add(mate.id);
-      const mIsFemale = mate.gender === 'Female';
-      const mIsDomainExpert = mate.domainId === ps.domainId;
-
-      await prisma.teamMember.create({
-        data: { teamId: team.id, studentId: mate.id, role: 'Member' }
-      });
-
-      await prisma.team.update({
-        where: { id: team.id },
-        data: {
-          memberCount: { increment: 1 },
-          femaleCount: { increment: mIsFemale ? 1 : 0 },
-          domainSpecificCount: { increment: mIsDomainExpert ? 1 : 0 }
-        }
-      });
-    }
-
-    // Final status hardening check
-    const updatedTeam = await prisma.team.findUnique({ where: { id: team.id } });
-    const isQualified = 
-      updatedTeam.memberCount >= 4 && 
-      updatedTeam.memberCount <= 5 &&
-      updatedTeam.femaleCount >= 1 && 
-      updatedTeam.domainSpecificCount >= 2;
-
-    if (isQualified && i < 4) { // Only confirm some to show difference
-      await prisma.team.update({
-        where: { id: team.id },
-        data: { teamStatus: 'CONFIRMED' }
-      });
-    }
-
-    // Add some join requests
-    const requester = verifiedStudents[verifiedStudents.length - 1 - i];
-    if (requester && requester.id !== leader.id) {
-      await prisma.joinRequest.create({
-        data: {
-          teamId: team.id,
-          studentId: requester.id,
-          status: 'PENDING'
-        }
-      }).catch(() => {}); // Ignore duplicates
-    }
   }
+  log(`CollegeRegistry: ${REGISTRY_SAMPLES.length} ensured`);
+};
 
-  console.log('--- DATABASE_SEEDING_COMPLETE ---');
-}
+// ── orchestration ──────────────────────────────────────────────────────────
+
+const main = async () => {
+  log('start');
+  await seedRules();
+  await seedRoundControl();
+  await seedTaxonomy();
+  await seedAdmin();
+  await seedJuries();
+  await seedRegistry();
+  log('done');
+};
 
 main()
-  .catch(console.error)
+  .catch((err) => {
+    console.error('[seed] failed:', err);
+    process.exit(1);
+  })
   .finally(() => prisma.$disconnect());

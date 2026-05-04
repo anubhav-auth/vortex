@@ -1,62 +1,54 @@
-import { prisma } from '../config/db.js';
-import { env } from '../config/env.js';
-import jwt from 'jsonwebtoken';
+import { userService } from '../services/user.service.js';
+import { verifyPassword } from '../utils/crypto.js';
+import { signAccessToken } from '../middleware/auth.js';
+import { Unauthorized, Forbidden } from '../utils/errors.js';
 
-export const login = async (req, res, next) => {
-  try {
-    const { email, password } = req.body;
+// Login. Single canonical 401 for "wrong email or password" to avoid email
+// enumeration. Status-based rejections (REJECTED/REVOKED) get distinct
+// 403 codes because the user already proved they know the password — at
+// that point hiding the reason is just hostile UX.
 
-    // For a real app, you should use bcrypt to hash and compare passwords
-    // Since the project is currently storing passwords in plain text or not at all (mock),
-    // we will check for a student with this email and password.
-    // Note: Admin might need a special entry or hardcoded check if not in DB.
+export const login = async (req, res) => {
+  const { email, password } = req.body;
+  const user = await userService.findForAuth(email);
 
-    let user = await prisma.student.findUnique({
-      where: { email },
-      include: {
-        domain: true,
-        institute: true,
-        problemStatement: true
-      }
-    });
-
-    // Simple hardcoded admin check if no student found, or you can add an admin role to the student table
-    if (!user && email === 'admin@vortex.com' && password === 'admin123') {
-      user = {
-        id: 'admin_root',
-        fullName: 'System Administrator',
-        email: 'admin@vortex.com',
-        role: 'ADMIN'
-      };
-    }
-
-    if (!user || user.password !== password) {
-      return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
-    }
-
-    if (user.role === 'STUDENT' && user.verificationStatus !== 'VERIFIED') {
-      return res.status(403).json({ error: 'ACCOUNT_NOT_VERIFIED' });
-    }
-
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      env.ACCESS_TOKEN_SECRET,
-      { expiresIn: env.ACCESS_TOKEN_EXPIRY }
-    );
-
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role,
-        domain: user.domain,
-        institute: user.institute,
-        ps: user.problemStatement
-      }
-    });
-  } catch (err) {
-    next(err);
+  // Combine "no such user" and "wrong password" into one branch.
+  if (!user || !user.passwordHash) {
+    throw Unauthorized('Invalid email or password');
   }
+  const ok = await verifyPassword(password, user.passwordHash);
+  if (!ok) throw Unauthorized('Invalid email or password');
+
+  // Past this point the credentials are valid. Now enforce account status.
+  if (user.verificationStatus === 'PENDING') {
+    throw Forbidden('Account is pending verification', { code: 'ACCOUNT_PENDING' });
+  }
+  if (user.verificationStatus === 'REJECTED') {
+    throw Forbidden('Account verification was rejected', { code: 'ACCOUNT_REJECTED' });
+  }
+  if (user.verificationStatus === 'REVOKED') {
+    throw Forbidden('Account access has been revoked', { code: 'ACCOUNT_REVOKED' });
+  }
+  if (user.verificationStatus !== 'VERIFIED') {
+    throw Forbidden('Account is not active');
+  }
+
+  await userService.recordLogin(user.id);
+  const token = signAccessToken(user);
+
+  res.json({
+    token,
+    user: {
+      id: user.id,
+      role: user.role,
+      email: user.email,
+      fullName: user.fullName,
+    },
+  });
+};
+
+export const me = async (req, res) => {
+  const user = await userService.findById(req.user.id);
+  if (!user) throw Unauthorized('Account no longer exists');
+  res.json({ user });
 };

@@ -2,14 +2,18 @@ generator client {
   provider = "prisma-client-js"
 }
 
+
 datasource db {
   provider = "postgresql"
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
+
 enum Role {
-  ADMIN
   STUDENT
-  TEAMLEAD
+  ADMIN
   JURY
 }
 
@@ -17,165 +21,381 @@ enum VerificationStatus {
   PENDING
   VERIFIED
   REJECTED
+  REVOKED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
 }
 
 enum TeamStatus {
   FORMING
-  CONFIRMED
+  QUALIFIED
+  FINALIZED
   DISQUALIFIED
 }
 
-model GlobalConfig {
-  id                  String  @id @default("vortex_config")
-  lockdownActive      Boolean @default(false)
-  leaderboardVisible  Boolean @default(true)
-  leaderboardLimit    Int     @default(100)
-  showMarks           Boolean @default(false)
-  broadcastSubject    String?
-  broadcastText       String?
-  minTeamMembers      Int     @default(2)
-  maxTeamMembers      Int     @default(5)
-  minFemaleMembers    Int     @default(1)
-  minDomainExperts    Int     @default(1)
+enum MemberRole {
+  LEADER
+  MEMBER
 }
 
-model Institute {
-  id        String    @id @default(cuid())
-  name      String    @unique
-  students  Student[]
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+}
+
+enum JoinRequestStatus {
+  PENDING
+  APPROVED
+  DENIED
+  CANCELLED
+}
+
+enum MembershipChangeKind {
+  LEAVE
+  DISMISS
+  DISBAND
+}
+
+enum MembershipChangeStatus {
+  PENDING
+  APPROVED
+  DENIED
+  EXECUTED
+  CANCELLED
+}
+
+enum Round {
+  ROUND_1
+  ROUND_2
+  ROUND_3
+}
+
+enum RoundState {
+  LOCKED
+  UNLOCKED
+  CLOSED
+}
+
+enum AuditAction {
+  USER_VERIFIED
+  USER_REJECTED
+  USER_REVOKED
+  TEAM_CREATED
+  TEAM_FINALIZED
+  TEAM_FORCE_MODIFIED
+  ROUND_STATE_CHANGED
+  RULES_UPDATED
+  BROADCAST_SENT
+  SCORE_SUBMITTED
+  REGISTRY_SYNCED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CORE: User + verification source
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id                 String             @id @default(cuid())
+  role               Role               @default(STUDENT)
+
+  fullName           String
+  email              String             @unique
+  registrationNo     String?            @unique
+  institutionId      String?
+  institution        Institution?       @relation(fields: [institutionId], references: [id])
+  domainId           String?
+  domain             Domain?            @relation(fields: [domainId], references: [id])
+  track              String?
+
+  phone              String?
+  discordId          String?
+  gender             Gender?
+  profilePicUrl      String?
+  linkedinUrl        String?
+  githubUrl          String?
+  bio                String?            @db.VarChar(1000)
+  isDomainExpert     Boolean            @default(false)
+
+  passwordHash       String?
+  verificationStatus VerificationStatus @default(PENDING)
+  passwordIssuedAt   DateTime?
+  lastLoginAt        DateTime?
+
+  ledTeam             Team?                     @relation("TeamLeader")
+  membership          TeamMember?
+  invitesReceived     TeamInvite[]              @relation("InviteToUser")
+  invitesSent         TeamInvite[]              @relation("InviteByLeader")
+  joinRequests        JoinRequest[]
+  membershipChanges   MembershipChangeRequest[] @relation("MCRTarget")
+  membershipApprovals MembershipChangeRequest[] @relation("MCRApprover")
+  scoresGiven         Evaluation[]              @relation("JuryScores")
+  juryAssignments     JuryAssignment[]
+  broadcastsSent      Broadcast[]
+  auditEntries        AuditLog[]
+
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([verificationStatus])
+  @@index([role])
+}
+
+model CollegeRegistry {
+  id             String      @id @default(cuid())
+  registrationNo String      @unique
+  fullName       String
+  email          String      @unique
+  institutionId  String
+  institution    Institution @relation(fields: [institutionId], references: [id])
+  uploadedAt     DateTime    @default(now())
+  uploadedById   String?
+
+  @@index([institutionId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAXONOMY (admin-managed)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Institution {
+  id        String            @id @default(cuid())
+  name      String            @unique
+  users     User[]
+  registry  CollegeRegistry[]
+  createdAt DateTime          @default(now())
 }
 
 model Domain {
   id                String             @id @default(cuid())
   name              String             @unique
-  students          Student[]
+  users             User[]
   problemStatements ProblemStatement[]
+  teams             Team[]
   createdAt         DateTime           @default(now())
 }
 
 model ProblemStatement {
-  id               String   @id @default(cuid())
-  title            String
-  description      String?  @db.Text
-  domainId         String
-  domain           Domain   @relation(fields: [domainId], references: [id])
-  createdAt        DateTime @default(now())
+  id          String   @id @default(cuid())
+  title       String
+  description String?  @db.Text
+  domainId    String
+  domain      Domain   @relation(fields: [domainId], references: [id])
+  teams       Team[]
+  createdAt   DateTime @default(now())
 
-  students Student[]
-  teams    Team[]
+  @@index([domainId])
 }
 
-model Student {
-  id                 String             @id @default(cuid())
-  fullName           String
-  rollNumber         String?            @unique
-  email              String             @unique
-  phone              String?            
-  password           String?            
-  summary            String?            @db.VarChar(1000)
-  role               Role               @default(STUDENT)
-  gender             String?
-  
-  instituteId        String?
-  institute          Institute?         @relation(fields: [instituteId], references: [id])
-  
-  domainId           String?
-  domain             Domain?            @relation(fields: [domainId], references: [id])
-  
-  psId               String?
-  problemStatement   ProblemStatement? @relation(fields: [psId], references: [id])
-  
-  verificationStatus VerificationStatus @default(PENDING)
-  otp                String?
-  otpVerified        Boolean            @default(false)
-  photo              String?            @db.Text
-  createdAt          DateTime           @default(now())
-
-  teams        TeamMember[]
-  ledTeam      Team?          @relation("TeamLeader")
-  joinRequests JoinRequest[]
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// TEAMS + dual-approval membership flow
+// ─────────────────────────────────────────────────────────────────────────────
 
 model Team {
-  id                  String           @id @default(cuid())
-  teamName            String           @unique
-  psId                String
-  problemStatement    ProblemStatement @relation(fields: [psId], references: [id])
-  leaderId            String           @unique
-  leader              Student          @relation("TeamLeader", fields: [leaderId], references: [id])
-  teamStatus          TeamStatus       @default(FORMING)
-  memberCount         Int              @default(0)
-  femaleCount         Int              @default(0)
-  domainSpecificCount Int              @default(0)
-  createdAt           DateTime         @default(now())
+  id               String            @id @default(cuid())
+  name             String            @unique
+  leaderId         String            @unique
+  leader           User              @relation("TeamLeader", fields: [leaderId], references: [id])
+  domainId         String
+  domain           Domain            @relation(fields: [domainId], references: [id])
+  psId             String?
+  problemStatement ProblemStatement? @relation(fields: [psId], references: [id])
 
-  members      TeamMember[]
-  evaluations  Evaluation[]
-  leaderboard  Leaderboard?
-  requests     JoinRequest[]
+  status           TeamStatus        @default(FORMING)
+  finalizedAt      DateTime?
+  adminOverride    Boolean           @default(false)
+
+  memberCount        Int @default(1)
+  femaleCount        Int @default(0)
+  domainExpertCount  Int @default(0)
+
+  members         TeamMember[]
+  invites         TeamInvite[]
+  joinRequests    JoinRequest[]
+  changeRequests  MembershipChangeRequest[]
+  evaluations     Evaluation[]
+  juryAssignments JuryAssignment[]
+  leaderboard     LeaderboardEntry?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([domainId])
 }
 
 model TeamMember {
-  teamId    String
-  team      Team     @relation(fields: [teamId], references: [id])
-  studentId String
-  student   Student  @relation(fields: [studentId], references: [id])
-  role      String   @default("Member")
-  addedAt   DateTime @default(now())
+  teamId   String
+  team     Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId   String     @unique
+  user     User       @relation(fields: [userId], references: [id])
+  role     MemberRole @default(MEMBER)
+  joinedAt DateTime   @default(now())
 
-  @@id([teamId, studentId])
+  @@id([teamId, userId])
+}
+
+model TeamInvite {
+  id          String       @id @default(cuid())
+  teamId      String
+  team        Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  inviterId   String
+  inviter     User         @relation("InviteByLeader", fields: [inviterId], references: [id])
+  inviteeId   String
+  invitee     User         @relation("InviteToUser", fields: [inviteeId], references: [id])
+  status      InviteStatus @default(PENDING)
+  createdAt   DateTime     @default(now())
+  respondedAt DateTime?
+
+  @@unique([teamId, inviteeId])
+  @@index([inviteeId, status])
 }
 
 model JoinRequest {
-  id          String   @id @default(cuid())
+  id          String            @id @default(cuid())
   teamId      String
-  team        Team     @relation(fields: [teamId], references: [id])
-  studentId   String
-  student     Student  @relation(fields: [studentId], references: [id])
-  status      String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
-  createdAt   DateTime @default(now())
+  team        Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  requesterId String
+  requester   User              @relation(fields: [requesterId], references: [id])
+  status      JoinRequestStatus @default(PENDING)
+  createdAt   DateTime          @default(now())
+  respondedAt DateTime?
 
-  @@unique([teamId, studentId])
+  @@unique([teamId, requesterId])
+  @@index([requesterId, status])
 }
 
-model EvaluationCriteria {
-  id          String       @id @default(cuid())
-  name        String
-  maxMarks    Int
-  evaluations ScoreEntry[]
+model MembershipChangeRequest {
+  id           String                 @id @default(cuid())
+  teamId       String
+  team         Team                   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  kind         MembershipChangeKind
+  targetUserId String
+  target       User                   @relation("MCRTarget", fields: [targetUserId], references: [id])
+  initiatorId  String
+  approverId   String
+  approver     User                   @relation("MCRApprover", fields: [approverId], references: [id])
+  status       MembershipChangeStatus @default(PENDING)
+  reason       String?
+  createdAt    DateTime               @default(now())
+  resolvedAt   DateTime?
+
+  @@index([teamId, status])
+  @@index([targetUserId, status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EVALUATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+model JuryAssignment {
+  id        String   @id @default(cuid())
+  juryId    String
+  jury      User     @relation(fields: [juryId], references: [id])
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  round     Round
+  createdAt DateTime @default(now())
+
+  @@unique([teamId, round])
+  @@unique([juryId, teamId, round])
+  @@index([juryId, round])
 }
 
 model Evaluation {
-  id          String       @id @default(cuid())
-  teamId      String
-  team        Team         @relation(fields: [teamId], references: [id])
-  round       Int
-  juryId      String
-  feedback    String?
-  scores      ScoreEntry[]
-  totalScore  Float        @default(0)
-  submittedAt DateTime     @default(now())
+  id           String   @id @default(cuid())
+  teamId       String
+  team         Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  juryId       String
+  jury         User     @relation("JuryScores", fields: [juryId], references: [id])
+  round        Round
+
+  innovation   Int
+  complexity   Int
+  presentation Int
+  impact       Int
+  feasibility  Int
+  total        Int
+  feedback     String?  @db.Text
+
+  submittedAt  DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@unique([teamId, round])
+  @@index([juryId, round])
 }
 
-model ScoreEntry {
-  id           String             @id @default(cuid())
-  evaluationId String
-  evaluation   Evaluation         @relation(fields: [evaluationId], references: [id])
-  criteriaId   String
-  criteria     EvaluationCriteria @relation(fields: [criteriaId], references: [id])
-  marks        Float
+model LeaderboardEntry {
+  teamId     String   @id
+  team       Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  r1Score    Int?
+  r2Score    Int?
+  r3Score    Int?
+  finalScore Float?
+  rank       Int?
+  updatedAt  DateTime @updatedAt
 
-  @@unique([evaluationId, criteriaId])
+  @@index([rank])
+  @@index([finalScore])
 }
 
-model Leaderboard {
-  teamId       String  @id
-  team         Team    @relation(fields: [teamId], references: [id])
-  r1Score      Float?
-  r2Score      Float?
-  gfScore      Float?
-  finalScore   Float?
-  rankPosition Int?
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN CONTROL
+// ─────────────────────────────────────────────────────────────────────────────
+
+model HackathonRules {
+  id                 String   @id @default("rules")
+  minTeamSize        Int      @default(3)
+  maxTeamSize        Int      @default(5)
+  minFemaleMembers   Int      @default(1)
+  minDomainExperts   Int      @default(1)
+  registrationOpen   Boolean  @default(true)
+  leaderboardVisible Boolean  @default(false)
+  showMarks          Boolean  @default(false)
+  // Global "freeze the world" switch. When true, every team-mutation
+  // path (create / invite / accept / join-request / approve / leave /
+  // dismiss / transfer-leadership / finalize) is rejected. Admin
+  // overrides (force-add, force-remove, force-finalize, disband) still
+  // work — by design, only an admin can move things.
+  teamLockdown       Boolean  @default(false)
+  updatedAt          DateTime @updatedAt
+  updatedById        String?
+}
+
+model RoundControl {
+  id          String     @id @default("round_control")
+  round1State RoundState @default(LOCKED)
+  round2State RoundState @default(LOCKED)
+  round3State RoundState @default(LOCKED)
+  updatedAt   DateTime   @updatedAt
+  updatedById String?
+}
+
+model Broadcast {
+  id        String   @id @default(cuid())
+  message   String   @db.Text
+  senderId  String
+  sender    User     @relation(fields: [senderId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  actorId    String?
+  actor      User?       @relation(fields: [actorId], references: [id])
+  action     AuditAction
+  entityType String
+  entityId   String?
+  details    Json?
+  createdAt  DateTime    @default(now())
+
+  @@index([action, createdAt])
+  @@index([entityType, entityId])
 }
