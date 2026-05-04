@@ -13,5 +13,6 @@ export const updateRulesSchema = z
     registrationOpen:   z.boolean().optional(),
     leaderboardVisible: z.boolean().optional(),
     showMarks:          z.boolean().optional(),
+    teamLockdown:       z.boolean().optional(),
   })
   .refine((p) => Object.keys(p).length > 0, { message: 'No fields to update' });

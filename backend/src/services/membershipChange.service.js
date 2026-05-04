@@ -1,6 +1,7 @@
 import { prisma } from '../config/db.js';
 import { Conflict, Forbidden, NotFound, BadRequest } from '../utils/errors.js';
 import { membershipService } from './membership.service.js';
+import { rulesService } from './rules.service.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DUAL-APPROVAL WORKFLOW ENGINE
@@ -35,6 +36,7 @@ export const membershipChangeService = {
    */
   async requestLeave({ teamId, userId, reason }) {
     return prisma.$transaction(async (tx) => {
+      await rulesService.assertTeamMutationsAllowed(tx);
       const team = await membershipService.loadTeamForUpdate(tx, teamId);
       if (team.status === 'FINALIZED') {
         throw Conflict('Team is finalized; membership cannot change');
@@ -77,6 +79,7 @@ export const membershipChangeService = {
     if (leaderId === targetUserId) throw BadRequest('Cannot dismiss yourself');
 
     return prisma.$transaction(async (tx) => {
+      await rulesService.assertTeamMutationsAllowed(tx);
       const team = await membershipService.loadTeamForUpdate(tx, teamId);
       if (team.status === 'FINALIZED') {
         throw Conflict('Team is finalized; membership cannot change');

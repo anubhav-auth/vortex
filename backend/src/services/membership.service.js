@@ -121,7 +121,8 @@ export const membershipService = {
    *
    * Returns the inserted TeamMember.
    */
-  async addMember(tx, { team, user, role = 'MEMBER', maxTeamSize, allowFinalized = false }) {
+  async addMember(tx, { team, user, role = 'MEMBER', maxTeamSize, allowFinalized = false, allowLockdown = false }) {
+    if (!allowLockdown) await rulesService.assertTeamMutationsAllowed(tx);
     if (!allowFinalized && team.status === 'FINALIZED') throw Conflict(FINALIZED_BLOCKED);
     if (team.status === 'DISQUALIFIED') throw Conflict('Team is disqualified');
     if (user.role !== 'STUDENT') throw Forbidden('Only students can join teams');
@@ -169,7 +170,8 @@ export const membershipService = {
    * deleted (cascade wipes members/invites/requests). Otherwise removing the
    * leader is rejected — leadership transfer is a separate operation.
    */
-  async removeMember(tx, { teamId, userId, allowFinalized = false, disbandIfLeader = false }) {
+  async removeMember(tx, { teamId, userId, allowFinalized = false, allowLockdown = false, disbandIfLeader = false }) {
+    if (!allowLockdown) await rulesService.assertTeamMutationsAllowed(tx);
     const team = await loadTeamForUpdate(tx, teamId);
     if (!allowFinalized && team.status === 'FINALIZED') throw Conflict(FINALIZED_BLOCKED);
 

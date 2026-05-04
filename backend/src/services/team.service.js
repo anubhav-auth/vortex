@@ -70,6 +70,7 @@ export const teamService = {
    */
   async create({ name, domainId, psId, leaderId }) {
     return prisma.$transaction(async (tx) => {
+      await rulesService.assertTeamMutationsAllowed(tx);
       const leader = await membershipService.loadUserOrThrow(tx, leaderId);
       if (leader.role !== 'STUDENT') throw Forbidden('Only students can create teams');
       if (leader.verificationStatus !== 'VERIFIED') {
@@ -209,6 +210,7 @@ export const teamService = {
    */
   async finalize({ teamId, actorId }) {
     return prisma.$transaction(async (tx) => {
+      await rulesService.assertTeamMutationsAllowed(tx);
       const team = await membershipService.loadTeamForUpdate(tx, teamId);
       if (team.leaderId !== actorId) throw Forbidden('Only the team leader can finalize');
       if (team.status === 'FINALIZED') throw Conflict('Team is already finalized');
@@ -267,6 +269,7 @@ export const teamService = {
     if (actorId === newLeaderId) throw BadRequest('You are already the leader');
 
     return prisma.$transaction(async (tx) => {
+      await rulesService.assertTeamMutationsAllowed(tx);
       const team = await tx.team.findUnique({
         where: { id: teamId },
         select: { id: true, leaderId: true, status: true },

@@ -14,6 +14,7 @@ export const joinRequestService = {
    */
   async create({ teamId, requesterId }) {
     return prisma.$transaction(async (tx) => {
+      await rulesService.assertTeamMutationsAllowed(tx);
       const team = await membershipService.loadTeamForUpdate(tx, teamId);
       if (team.status === 'FINALIZED') throw Conflict('Team is finalized');
       if (team.status === 'DISQUALIFIED') throw Conflict('Team is disqualified');

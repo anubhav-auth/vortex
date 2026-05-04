@@ -32,6 +32,7 @@ export const teamAdminService = {
         role,
         maxTeamSize: Math.max(rules.maxTeamSize, team.memberCount + 1),
         allowFinalized: true,
+        allowLockdown: true,
       });
 
       await tx.team.update({
@@ -49,7 +50,7 @@ export const teamAdminService = {
       if (team.leaderId === userId) {
         throw BadRequest('Use disbandTeam to remove the leader');
       }
-      await membershipService.removeMember(tx, { teamId, userId, allowFinalized: true });
+      await membershipService.removeMember(tx, { teamId, userId, allowFinalized: true, allowLockdown: true });
       await tx.team.update({ where: { id: teamId }, data: { adminOverride: true } });
       return tx.team.findUnique({ where: { id: teamId }, include: teamService.detailInclude });
     });
