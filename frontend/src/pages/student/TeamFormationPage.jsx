@@ -327,7 +327,11 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
   // Membership-change requests I've started — used to swap the "Request to
   // leave" button for "Cancel leave request" while one is in flight, so
   // users don't keep clicking and getting 409s.
-  const myChanges = useApi(() => api.get('/api/membership-changes/initiated-me'), []);
+  const myChanges = useApi(
+    () => api.get('/api/membership-changes/initiated-me'),
+    [],
+    { pollMs: 5000 },
+  );
   const myPendingLeave = (myChanges.data?.changes ?? []).find(
     (c) => c.team?.id === team.id && c.kind === 'LEAVE',
   );
@@ -335,7 +339,11 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
   // Leader-side: change requests awaiting MY approval (leave requests
   // from members of this team, plus dismissals where I'm the target —
   // although as leader I'd never receive a dismissal).
-  const awaitingMe = useApi(() => api.get('/api/membership-changes/awaiting-me'), []);
+  const awaitingMe = useApi(
+    () => api.get('/api/membership-changes/awaiting-me'),
+    [],
+    { pollMs: 5000 },
+  );
   const teamPendingForMe = (awaitingMe.data?.changes ?? []).filter(
     (c) => c.team?.id === team.id,
   );
@@ -506,6 +514,13 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
           {team.members.map((m) => {
             const isMe = m.user.id === user.id;
             const isThisLeader = m.role === 'LEADER';
+            // If this member already has an open change request, hide the
+            // leader's start-a-new-one buttons — they should approve the
+            // existing one in the panel below instead. Prevents the dual-
+            // dismiss / leave-then-dismiss 409 you can otherwise get.
+            const memberHasOpenChange = teamPendingForMe.some(
+              (c) => c.target?.id === m.user.id,
+            );
             return (
               <article key={m.user.id} className="glass-card flat flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
@@ -522,14 +537,18 @@ const MyTeamView = ({ team, evaluation, onMutate }) => {
                 <div className="flex flex-col items-end gap-1">
                   <Badge tone={isThisLeader ? 'cyan' : 'dim'}>{m.role}</Badge>
                   {isLeader && !isThisLeader && !isFinalized && (
-                    <div className="flex gap-1">
-                      <button className="ghost-button text-[10px]" onClick={() => transferLeader(m.user.id, m.user.fullName)}>
-                        Make leader
-                      </button>
-                      <button className="danger-button text-[10px]" onClick={() => dismissMember(m.user.id, m.user.fullName)}>
-                        Dismiss
-                      </button>
-                    </div>
+                    memberHasOpenChange ? (
+                      <Badge tone="warn">Awaiting your decision ↓</Badge>
+                    ) : (
+                      <div className="flex gap-1">
+                        <button className="ghost-button text-[10px]" onClick={() => transferLeader(m.user.id, m.user.fullName)}>
+                          Make leader
+                        </button>
+                        <button className="danger-button text-[10px]" onClick={() => dismissMember(m.user.id, m.user.fullName)}>
+                          Dismiss
+                        </button>
+                      </div>
+                    )
                   )}
                 </div>
               </article>
