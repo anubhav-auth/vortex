@@ -37,4 +37,4 @@ EXPOSE 3001
 # Apply any pending Prisma schema changes before booting. Render's free
 # tier doesn't allow Pre-Deploy Commands, so we do it here in the CMD.
 # Idempotent — does nothing if the schema is already in sync.
-CMD npx prisma db push --accept-data-loss --skip-generate && node src/index.js
+CMD npx prisma db push --accept-data-loss && node src/index.js
