@@ -1,8 +1,10 @@
 import { Router } from 'express';
-import { getAwards } from '../controllers/awards.controller.js';
+import { optionalAuth } from '../middleware/auth.js';
+import { ah } from '../utils/asyncHandler.js';
+import * as awards from '../controllers/awards.controller.js';
 
 const router = Router();
 
-router.get('/', getAwards);
+router.get('/', optionalAuth, ah(awards.list));
 
 export default router;

@@ -34,4 +34,7 @@ ENV PORT=3001
 
 EXPOSE 3001
 
-CMD ["node", "src/index.js"]
+# Apply any pending Prisma schema changes before booting. Render's free
+# tier doesn't allow Pre-Deploy Commands, so we do it here in the CMD.
+# Idempotent — does nothing if the schema is already in sync.
+CMD npx prisma db push --accept-data-loss && node src/index.js

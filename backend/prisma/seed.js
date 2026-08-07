@@ -1,273 +1,434 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import bcrypt from 'bcrypt';
 import 'dotenv/config';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Idempotent seed.
+//
+// Every write is an upsert keyed on a stable natural identifier (email, name,
+// registrationNo) or on a fixed singleton id. Running this script twice is
+// safe and converges to the same state.
+//
+// What it seeds:
+//   - HackathonRules singleton (id="rules")
+//   - RoundControl singleton (id="round_control") — all rounds LOCKED
+//   - Admin user (env-driven credentials, dev defaults)
+//   - 3 Jury users (deterministic dev passwords)
+//   - 10 Campus coordinator users (one per institution)
+//   - 10 Institutions, 29 Domains, 10 ProblemStatements
+//   - 8 sample CollegeRegistry rows (so admin verification flow is testable)
+//
+// What it does NOT seed:
+//   - Students (registration is the user-facing flow)
+//   - Teams, evaluations, leaderboard (downstream of student/jury actions)
+// ─────────────────────────────────────────────────────────────────────────────
+
 const adapter = new PrismaPg(process.env.DATABASE_URL);
+const prisma = new PrismaClient({ adapter });
 
-const prisma = new PrismaClient({
-  adapter,
-});
+const log = (msg) => console.log(`[seed] ${msg}`);
 
-// Placeholder transparent 1x1 base64 pixel to avoid empty photos
-const PLACEHOLDER_PHOTO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+const ROUNDS = parseInt(process.env.BCRYPT_ROUNDS ?? '12', 10);
+const ADMIN_EMAIL = process.env.ADMIN_SEED_EMAIL ?? 'admin@vortex.com';
+const ADMIN_PASSWORD = process.env.ADMIN_SEED_PASSWORD ?? 'admin123';
 
-async function main() {
-  console.log('--- DATABASE_CLEANUP_INITIALIZED ---');
-  await prisma.scoreEntry.deleteMany({});
-  await prisma.evaluation.deleteMany({});
-  await prisma.evaluationCriteria.deleteMany({});
-  await prisma.joinRequest.deleteMany({});
-  await prisma.leaderboard.deleteMany({});
-  await prisma.teamMember.deleteMany({});
-  await prisma.team.deleteMany({});
-  await prisma.problemStatement.deleteMany({});
-  await prisma.student.deleteMany({});
-  await prisma.domain.deleteMany({});
-  await prisma.institute.deleteMany({});
-  await prisma.globalConfig.deleteMany({});
+const JURY_DEFAULT_PASSWORD = process.env.JURY_SEED_PASSWORD ?? 'jury123';
+const COORDINATOR_DEFAULT_PASSWORD = process.env.COORDINATOR_SEED_PASSWORD ?? 'coord123';
 
-  console.log('--- SEEDING_GLOBAL_CONFIG ---');
-  await prisma.globalConfig.create({
-    data: {
-      id: 'vortex_config',
-      lockdownActive: false,
-      leaderboardVisible: true,
-      leaderboardLimit: 50,
-      showMarks: true,
-      minTeamMembers: 2,
-      maxTeamMembers: 5,
+// ── singletons ──────────────────────────────────────────────────────────────
+
+const seedRules = async () => {
+  const rules = await prisma.hackathonRules.upsert({
+    where: { id: 'rules' },
+    update: {}, // never overwrite admin's hand-tuned values
+    create: {
+      id: 'rules',
+      minTeamSize: 3,
+      maxTeamSize: 5,
       minFemaleMembers: 1,
       minDomainExperts: 1,
+      registrationOpen: true,
+      leaderboardVisible: false,
+      showMarks: false,
+    },
+  });
+  log(`HackathonRules ready (id=${rules.id})`);
+};
+
+const seedRoundControl = async () => {
+  const rc = await prisma.roundControl.upsert({
+    where: { id: 'round_control' },
+    update: {},
+    create: {
+      id: 'round_control',
+      round1State: 'LOCKED',
+      round2State: 'LOCKED',
+      round3State: 'LOCKED',
+    },
+  });
+  log(`RoundControl ready (id=${rc.id})`);
+};
+
+// ── taxonomy ────────────────────────────────────────────────────────────────
+
+const INSTITUTIONS = [
+  'ITER | SOA',
+  'SPS | SOA',
+  'SNC | SOA',
+  'IMS & SUM | SOA',
+  'IDS | SOA',
+  'SNIL | SOA',
+  'IAS | SOA',
+  'IVS & AH | SOA',
+  'IBCS | SOA',
+  'SHM | SOA',
+];
+
+const DOMAINS = [
+  'Healthcare & Medical Technology',
+  'Pharmaceutical Innovation',
+  'Nursing & Patient Care',
+  'Mental Health & Wellness',
+  'Dental Healthcare',
+  'Agriculture & Smart Farming',
+  'Veterinary & Animal Welfare',
+  'Food Technology',
+  'Environmental Sustainability',
+  'Climate & Green Technology',
+  'Legal Technology',
+  'Cybersecurity & Digital Safety',
+  'Artificial Intelligence',
+  'Education Technology',
+  'Business & Finance',
+  'Marketing & Consumer Experience',
+  'Hospitality & Tourism',
+  'Smart Campus Solutions',
+  'Social Impact & Community Development',
+  'E-Commerce & Retail',
+  'Productivity & Workflow Automation',
+  'Research & Innovation',
+  'IoT & Smart Devices',
+  'Public Health Systems',
+  'Women Safety & Empowerment',
+  'Accessibility & Inclusion',
+  'Rural Development',
+  'Supply Chain & Logistics',
+  'Open Innovation',
+];
+
+const PROBLEM_STATEMENTS = [
+  ['Healthcare & Medical Technology', 'Remote triage assistant for primary care',
+                                      'Build a multilingual intake workflow that prioritizes patients using symptoms, vitals, and urgency rules.'],
+  ['Pharmaceutical Innovation',       'Cold-chain visibility for essential medicines',
+                                      'Track temperature excursions across storage and transit with automated alerting for quality teams.'],
+  ['Nursing & Patient Care',          'Bedside handover companion for nursing shifts',
+                                      'Design a structured handover tool that captures vitals, medications, and care notes with offline support and audit history.'],
+  ['Mental Health & Wellness',        'Early burnout signal detection for students',
+                                      'Design a privacy-conscious wellbeing check-in system with escalation pathways and self-help interventions.'],
+  ['Dental Healthcare',               'AI-assisted dental imaging triage',
+                                      'Help dental clinicians prioritize X-ray reviews by flagging cavities, bone loss, and abnormalities with confidence scores.'],
+  ['Agriculture & Smart Farming',     'Precision irrigation for smallholder farms',
+                                      'Use soil, weather, and crop signals to recommend irrigation schedules that reduce water waste.'],
+  ['Veterinary & Animal Welfare',     'Livestock health monitoring for rural vets',
+                                      'Build a low-bandwidth field tool that lets para-vets log symptoms, track outbreaks, and request remote consults.'],
+  ['Food Technology',                 'Shelf-life prediction for perishable inventory',
+                                      'Combine packaging data, storage conditions, and supply timelines to predict spoilage and reduce food waste in retail.'],
+  ['Environmental Sustainability',    'Smart waste segregation feedback loop',
+                                      'Prototype a vision-assisted waste sorting system that improves recycling compliance on campus.'],
+  ['Climate & Green Technology',      'Hyperlocal air quality reporter',
+                                      'Aggregate low-cost sensor readings into ward-level air quality dashboards with health-impact guidance for residents.'],
+  ['Legal Technology',                'Plain-language explainer for legal notices',
+                                      'Convert dense legal documents into structured summaries, obligations, and timelines that non-lawyers can act on.'],
+  ['Cybersecurity & Digital Safety',  'Phishing-resistant SSO for student portals',
+                                      'Build a passkey-based SSO with attested device binding and risk-based recovery flows.'],
+  ['Artificial Intelligence',         'On-device speech-to-action assistant',
+                                      'Create a low-latency assistant that converts natural speech into reliable actions on constrained devices.'],
+  ['Education Technology',            'Adaptive practice for foundational math gaps',
+                                      'Diagnose conceptual gaps from short assessments and generate targeted practice that moves at each learner\'s pace.'],
+  ['Business & Finance',              'Cashflow forecasting for micro-businesses',
+                                      'Help small shop owners project the next 30 days of cashflow from invoices, receipts, and seasonality patterns.'],
+  ['Marketing & Consumer Experience', 'Sentiment-aware product feedback inbox',
+                                      'Cluster reviews and support tickets into themes ranked by emotional intensity and business impact.'],
+  ['Hospitality & Tourism',           'Itinerary builder for off-season travel',
+                                      'Recommend personalized multi-day itineraries that surface lesser-known destinations and balance cost, distance, and weather.'],
+  ['Smart Campus Solutions',          'Predictive maintenance for campus infrastructure',
+                                      'Use equipment telemetry to forecast failures in lifts, labs, and utilities before outages occur.'],
+  ['Social Impact & Community Development', 'Volunteer matching for hyperlocal causes',
+                                      'Match volunteers to nearby NGOs by skill, time slot, and cause area, with verified impact tracking.'],
+  ['E-Commerce & Retail',             'Returns intelligence for D2C brands',
+                                      'Surface root causes of returns from product, fit, and review signals so brands can fix listings and reduce reverse logistics.'],
+  ['Productivity & Workflow Automation', 'Meeting-to-action distiller',
+                                      'Turn long meeting transcripts into prioritized action items with owners, deadlines, and follow-up nudges.'],
+  ['Research & Innovation',           'Literature gap finder for student researchers',
+                                      'Help undergrads spot under-explored sub-topics in a field by clustering recent papers and surfacing thin citation areas.'],
+  ['IoT & Smart Devices',             'Edge-managed energy budget for shared spaces',
+                                      'Coordinate appliances and lighting in shared housing to stay within an agreed energy budget without manual scheduling.'],
+  ['Public Health Systems',           'Outbreak-pattern dashboard for district health offices',
+                                      'Aggregate clinic-level case data into early-warning signals that respect privacy and work over intermittent connectivity.'],
+  ['Women Safety & Empowerment',      'Safe-route escort and rapid alert network',
+                                      'Develop a route-aware system for emergency escalation, volunteer response, and evidence capture.'],
+  ['Accessibility & Inclusion',       'Real-time captioning for classroom lectures',
+                                      'Deliver low-latency captions and glossary support for hearing-impaired students, with teacher controls for terminology.'],
+  ['Rural Development',               'Last-mile service request board for panchayats',
+                                      'Let villagers raise civic requests by voice or SMS and route them to the right department with transparent SLAs.'],
+  ['Supply Chain & Logistics',        'Real-time warehouse routing under congestion',
+                                      'Optimize picking and movement paths using live aisle conditions, queueing data, and operational constraints.'],
+  ['Open Innovation',                 'Open challenge: pick a real campus problem and ship a 48-hour prototype',
+                                      'Identify a friction point you observe daily on campus, scope it tightly, and ship a working prototype with a 2-minute demo. Judged on problem clarity and execution.'],
+];
+
+const seedTaxonomy = async () => {
+  for (const name of INSTITUTIONS) {
+    await prisma.institution.upsert({ where: { name }, update: {}, create: { name } });
+  }
+  log(`Institutions: ${INSTITUTIONS.length} ensured`);
+
+  for (const name of DOMAINS) {
+    await prisma.domain.upsert({ where: { name }, update: {}, create: { name } });
+  }
+  log(`Domains: ${DOMAINS.length} ensured`);
+
+  // Problem statements are seeded idempotently by (title, domainId).
+  // Remove legacy seed data that is no longer part of the canonical set.
+  // A PS is "canonical" if its (title, domain.name) appears in PROBLEM_STATEMENTS.
+  // Anything else is removed UNLESS at least one team has selected it.
+  const canonicalKeys = new Set(
+    PROBLEM_STATEMENTS.map(([domainName, title]) => `${domainName}::${title}`),
+  );
+
+  const allCurrentPS = await prisma.problemStatement.findMany({
+    select: {
+      id: true,
+      title: true,
+      domain: { select: { name: true } },
+      _count: { select: { teams: true } },
     },
   });
 
-  console.log('--- SEEDING_INSTITUTIONS ---');
-  const institutes = await Promise.all([
-    { name: 'Institute of Technology, Delhi' },
-    { name: 'MIT World Peace University' },
-    { name: 'Stanford Engineering' },
-    { name: 'BITS Pilani' },
-    { name: 'SRM Institute' }
-  ].map(data => prisma.institute.create({ data })));
-
-  console.log('--- SEEDING_DOMAINS ---');
-  const domains = await Promise.all([
-    { name: 'Cybersecurity' },
-    { name: 'Artificial Intelligence' },
-    { name: 'Blockchain' },
-    { name: 'IoT & Robotics' },
-    { name: 'FinTech' }
-  ].map(data => prisma.domain.create({ data })));
-
-  console.log('--- SEEDING_EVALUATION_CRITERIA ---');
-  const criteria = await Promise.all([
-    { name: 'Innovation & Novelty', maxMarks: 10 },
-    { name: 'Technical Complexity', maxMarks: 10 },
-    { name: 'Feasibility & Scalability', maxMarks: 10 },
-    { name: 'Impact & Utility', maxMarks: 10 },
-    { name: 'Presentation & UI/UX', maxMarks: 10 }
-  ].map(data => prisma.evaluationCriteria.create({ data })));
-
-  console.log('--- SEEDING_PROBLEM_STATEMENTS ---');
-  const allPS = [];
-  const psDescriptions = [
-    "Develop a zero-trust architecture for securing IoT devices in smart cities.",
-    "Implement an AI-driven predictive maintenance system for autonomous fleets.",
-    "Build a decentralized identity platform for cross-border financial transactions.",
-    "Optimize real-time supply chain logistics using computer vision and robotics.",
-    "Create a privacy-preserving credit scoring model using federated learning."
-  ];
-
-  for (const [index, domain] of domains.entries()) {
-    for (let i = 1; i <= 3; i++) {
-      const ps = await prisma.problemStatement.create({
-        data: {
-          title: `${domain.name} Challenge ${i}: ${['Alpha', 'Beta', 'Gamma'][i-1]}`,
-          description: psDescriptions[index % psDescriptions.length],
-          domainId: domain.id
-        }
-      });
-      allPS.push(ps);
+  const removablePSIds = [];
+  let skippedDueToTeams = 0;
+  for (const ps of allCurrentPS) {
+    const key = `${ps.domain.name}::${ps.title}`;
+    if (canonicalKeys.has(key)) continue;
+    if (ps._count.teams > 0) {
+      log(`Skipped legacy PS "${ps.title}" in "${ps.domain.name}" (${ps._count.teams} team(s) attached)`);
+      skippedDueToTeams += 1;
+      continue;
     }
+    removablePSIds.push(ps.id);
   }
 
-  console.log('--- SEEDING_ADMIN_AND_JURY_ACCOUNTS ---');
-  await prisma.student.create({
-    data: {
-      fullName: 'Vortex Admin',
-      rollNumber: 'ADM-001',
-      email: 'admin@vortex.com',
-      password: 'admin123',
-      role: 'ADMIN',
-      verificationStatus: 'VERIFIED',
-      otpVerified: true,
-      photo: PLACEHOLDER_PHOTO
+  if (removablePSIds.length) {
+    await prisma.problemStatement.deleteMany({
+      where: { id: { in: removablePSIds } },
+    });
+    log(`Outdated ProblemStatements removed: ${removablePSIds.length}${skippedDueToTeams ? ` (skipped ${skippedDueToTeams} attached to teams)` : ''}`);
+  }
+
+  const removableDomains = await prisma.domain.findMany({
+    where: { name: { notIn: DOMAINS } },
+    include: {
+      _count: {
+        select: {
+          users: true,
+          problemStatements: true,
+          teams: true,
+        },
+      },
     },
   });
 
-  const jury = await prisma.student.create({
-    data: {
-      fullName: 'Chief Jury Alpha',
-      rollNumber: 'JRY-001',
-      email: 'jury@vortex.com',
-      password: 'password123',
+  let removedDomains = 0;
+  for (const domain of removableDomains) {
+    const { users, problemStatements, teams } = domain._count;
+    if (users + problemStatements + teams > 0) {
+      log(`Skipped outdated domain "${domain.name}" (users=${users}, problemStatements=${problemStatements}, teams=${teams})`);
+      continue;
+    }
+    await prisma.domain.delete({ where: { id: domain.id } });
+    removedDomains += 1;
+  }
+
+  if (removedDomains) log(`Outdated domains removed: ${removedDomains}`);
+
+  // Problem statements are keyed by title within a domain for idempotent seeding.
+  const domainByName = Object.fromEntries(
+    (await prisma.domain.findMany()).map((d) => [d.name, d.id]),
+  );
+
+  for (const [domainName, title, description] of PROBLEM_STATEMENTS) {
+    const domainId = domainByName[domainName];
+    if (!domainId) continue;
+    const existing = await prisma.problemStatement.findFirst({
+      where: { title, domainId },
+      select: { id: true },
+    });
+    if (!existing) {
+      await prisma.problemStatement.create({ data: { title, description, domainId } });
+    }
+  }
+  log(`ProblemStatements: ${PROBLEM_STATEMENTS.length} ensured`);
+};
+
+// ── users ──────────────────────────────────────────────────────────────────
+
+const upsertPrivilegedUser = async ({ email, fullName, role, password, institutionId }) => {
+  const passwordHash = await bcrypt.hash(password, ROUNDS);
+  return prisma.user.upsert({
+    where: { email },
+    update: institutionId ? { institutionId } : {}, // do not reset password on re-seed; admin can rotate via API
+    create: {
+      email,
+      fullName,
+      role,
+      institutionId,
+      verificationStatus: 'VERIFIED',
+      passwordHash,
+      passwordIssuedAt: new Date(),
+    },
+    select: { id: true, email: true, role: true },
+  });
+};
+
+const seedAdmin = async () => {
+  const admin = await upsertPrivilegedUser({
+    email: ADMIN_EMAIL,
+    fullName: 'Vortex Admin',
+    role: 'ADMIN',
+    password: ADMIN_PASSWORD,
+  });
+  log(`Admin ready (${admin.email})`);
+  if (ADMIN_PASSWORD === 'admin123') {
+    log('  ⚠ using default admin password — set ADMIN_SEED_PASSWORD in .env');
+  }
+};
+
+const JURY_SPECS = [
+  { email: 'jury.alpha@vortex.com',  fullName: 'Jury Alpha'  },
+  { email: 'jury.bravo@vortex.com',  fullName: 'Jury Bravo'  },
+  { email: 'jury.charlie@vortex.com',fullName: 'Jury Charlie'},
+];
+
+const seedJuries = async () => {
+  for (const spec of JURY_SPECS) {
+    await upsertPrivilegedUser({
+      ...spec,
       role: 'JURY',
-      verificationStatus: 'VERIFIED',
-      otpVerified: true,
-      photo: PLACEHOLDER_PHOTO
+      password: JURY_DEFAULT_PASSWORD,
+    });
+  }
+  log(`Juries: ${JURY_SPECS.length} ensured (default password: ${JURY_DEFAULT_PASSWORD})`);
+};
+
+const COORDINATOR_SPECS = [
+  { institutionName: 'ITER | SOA', email: 'coordinator.iter@vortex.com' },
+  { institutionName: 'SPS | SOA', email: 'coordinator.sps@vortex.com' },
+  { institutionName: 'SNC | SOA', email: 'coordinator.snc@vortex.com' },
+  { institutionName: 'IMS & SUM | SOA', email: 'coordinator.ims@vortex.com' },
+  { institutionName: 'IDS | SOA', email: 'coordinator.ids@vortex.com' },
+  { institutionName: 'SNIL | SOA', email: 'coordinator.snil@vortex.com' },
+  { institutionName: 'IAS | SOA', email: 'coordinator.ias@vortex.com' },
+  { institutionName: 'IVS & AH | SOA', email: 'coordinator.ivs@vortex.com' },
+  { institutionName: 'IBCS | SOA', email: 'coordinator.ibcs@vortex.com' },
+  { institutionName: 'SHM | SOA', email: 'coordinator.shm@vortex.com' },
+];
+
+const seedCoordinators = async () => {
+  const instByName = Object.fromEntries(
+    (await prisma.institution.findMany()).map((i) => [i.name, i.id]),
+  );
+
+  for (const spec of COORDINATOR_SPECS) {
+    const institutionId = instByName[spec.institutionName];
+    if (!institutionId) continue;
+    await upsertPrivilegedUser({
+      email: spec.email,
+      fullName: `${spec.institutionName} Coordinator`,
+      role: 'COORDINATOR',
+      institutionId,
+      password: COORDINATOR_DEFAULT_PASSWORD,
+    });
+  }
+
+  log(`Coordinators: ${COORDINATOR_SPECS.length} ensured (default password: ${COORDINATOR_DEFAULT_PASSWORD})`);
+};
+
+// ── registry ────────────────────────────────────────────────────────────────
+
+const REGISTRY_SAMPLES = [
+  ['2026-VRTX-100', 'Alice Vance',     'alice.vance@vortex.com',     'ITER | SOA'],
+  ['2026-VRTX-101', 'Bob Smith',       'bob.smith@vortex.com',       'SPS | SOA'],
+  ['2026-VRTX-102', 'Carla Mendes',    'carla.mendes@vortex.com',    'SNC | SOA'],
+  ['2026-VRTX-103', 'Devraj Patil',    'devraj.patil@vortex.com',    'IMS & SUM | SOA'],
+  ['2026-VRTX-104', 'Esha Nair',       'esha.nair@vortex.com',       'IDS | SOA'],
+  ['2026-VRTX-105', 'Farhan Iqbal',    'farhan.iqbal@vortex.com',    'SNIL | SOA'],
+  ['2026-VRTX-106', 'Gita Roy',        'gita.roy@vortex.com',        'IAS | SOA'],
+  ['2026-VRTX-107', 'Hari Menon',      'hari.menon@vortex.com',      'IVS & AH | SOA'],
+];
+
+const seedRegistry = async () => {
+  const instByName = Object.fromEntries(
+    (await prisma.institution.findMany()).map((i) => [i.name, i.id]),
+  );
+
+  for (const [registrationNo, fullName, email, institutionName] of REGISTRY_SAMPLES) {
+    const institutionId = instByName[institutionName];
+    if (!institutionId) continue;
+    await prisma.collegeRegistry.upsert({
+      where: { registrationNo },
+      update: { fullName, email, institutionId },
+      create: { registrationNo, fullName, email, institutionId },
+    });
+  }
+  log(`CollegeRegistry: ${REGISTRY_SAMPLES.length} ensured`);
+};
+
+const cleanupInstitutions = async () => {
+  const removableInstitutions = await prisma.institution.findMany({
+    where: { name: { notIn: INSTITUTIONS } },
+    include: {
+      _count: {
+        select: {
+          users: true,
+          registry: true,
+        },
+      },
     },
   });
 
-  console.log('--- SEEDING_PARTICIPANTS ---');
-  const students = [];
-  const names = [
-    "Alice Vance", "Bob Smith", "Charlie Day", "Diana Prince", "Ethan Hunt", 
-    "Fiona Gallager", "George Costanza", "Hannah Abbott", "Ian Wright", "Julia Roberts",
-    "Kevin Hart", "Luna Lovegood", "Miles Morales", "Nina Simone", "Oscar Isaac",
-    "Peter Parker", "Quinn Fabray", "Riley Reid", "Sarah Connor", "Tony Stark",
-    "Uma Thurman", "Victor Stone", "Wanda Maximoff", "Xavier Woods", "Yara Shahidi",
-    "Zoe Saldana", "Arthur Morgan", "Billie Eilish", "Cillian Murphy", "David Bowie"
-  ];
-
-  for (let i = 0; i < names.length; i++) {
-    const inst = institutes[i % institutes.length];
-    const dom = domains[i % domains.length];
-    const ps = allPS[Math.floor(Math.random() * allPS.length)];
-    
-    const student = await prisma.student.create({
-      data: {
-        fullName: names[i],
-        rollNumber: `2026-VRTX-${(i + 100).toString()}`,
-        email: `${names[i].toLowerCase().replace(' ', '.')}@vortex.com`,
-        phone: `+91 ${Math.floor(6000000000 + Math.random() * 3999999999)}`,
-        password: `password123`,
-        summary: `Participant specializing in ${dom.name}. Ready for hackathon participation from ${inst.name}.`,
-        role: 'STUDENT',
-        gender: i % 3 === 0 ? 'Female' : 'Male', // Increased female ratio slightly for seeding
-        instituteId: inst.id,
-        domainId: dom.id,
-        psId: ps.id,
-        verificationStatus: i % 10 === 0 ? 'PENDING' : 'VERIFIED', // Fewer pending for better team formation
-        otpVerified: true,
-        photo: PLACEHOLDER_PHOTO
-      },
-    });
-    students.push(student);
+  let removedInstitutions = 0;
+  for (const institution of removableInstitutions) {
+    const { users, registry } = institution._count;
+    if (users + registry > 0) {
+      log(`Skipped outdated institution "${institution.name}" (users=${users}, registry=${registry})`);
+      continue;
+    }
+    await prisma.institution.delete({ where: { id: institution.id } });
+    removedInstitutions += 1;
   }
 
-  console.log('--- SEEDING_TEAMS ---');
-  const verifiedStudents = students.filter(s => s.verificationStatus === 'VERIFIED');
-  const studentsInTeams = new Set();
-  
-  const teamNames = ["Shadow", "Vanguard", "Nebula", "Titan", "Phantom", "Rogue"];
-  
-  for (let i = 0; i < teamNames.length; i++) {
-    const ps = allPS[i % allPS.length];
-    // Pick a leader who matches the PS domain
-    const potentialLeaders = verifiedStudents.filter(s => 
-      s.psId === ps.id && 
-      s.domainId === ps.domainId && 
-      !studentsInTeams.has(s.id)
-    );
-    
-    const leader = potentialLeaders[0] || verifiedStudents.find(s => !studentsInTeams.has(s.id));
-    if (!leader) break;
+  if (removedInstitutions) log(`Outdated institutions removed: ${removedInstitutions}`);
+};
 
-    studentsInTeams.add(leader.id);
+// ── orchestration ──────────────────────────────────────────────────────────
 
-    const isFemale = leader.gender === 'Female';
-    const isDomainExpert = leader.domainId === ps.domainId;
-
-    const team = await prisma.team.create({
-      data: {
-        teamName: `${teamNames[i]} Team`,
-        psId: ps.id,
-        leaderId: leader.id,
-        teamStatus: 'FORMING',
-        memberCount: 1,
-        femaleCount: isFemale ? 1 : 0,
-        domainSpecificCount: isDomainExpert ? 1 : 0
-      },
-    });
-
-    await prisma.teamMember.create({
-      data: { teamId: team.id, studentId: leader.id, role: 'Leader' },
-    });
-
-    await prisma.student.update({
-      where: { id: leader.id },
-      data: { role: 'TEAMLEAD' }
-    });
-
-    // Strategy to fill team correctly:
-    // 1. Add another domain expert if possible
-    // 2. Add female member if leader isn't female
-    // 3. Add more members until 4 or 5
-    
-    const potentialMates = verifiedStudents.filter(s => 
-      s.psId === ps.id && 
-      s.id !== leader.id && 
-      !studentsInTeams.has(s.id)
-    );
-
-    // Sort to prioritize domain experts and females
-    potentialMates.sort((a, b) => {
-      const aScore = (a.domainId === ps.domainId ? 2 : 0) + (a.gender === 'Female' ? 1 : 0);
-      const bScore = (b.domainId === ps.domainId ? 2 : 0) + (b.gender === 'Female' ? 1 : 0);
-      return bScore - aScore;
-    });
-
-    const matesToAdd = potentialMates.slice(0, 4); // Aim for 5 total if possible
-    for (const mate of matesToAdd) {
-      studentsInTeams.add(mate.id);
-      const mIsFemale = mate.gender === 'Female';
-      const mIsDomainExpert = mate.domainId === ps.domainId;
-
-      await prisma.teamMember.create({
-        data: { teamId: team.id, studentId: mate.id, role: 'Member' }
-      });
-
-      await prisma.team.update({
-        where: { id: team.id },
-        data: {
-          memberCount: { increment: 1 },
-          femaleCount: { increment: mIsFemale ? 1 : 0 },
-          domainSpecificCount: { increment: mIsDomainExpert ? 1 : 0 }
-        }
-      });
-    }
-
-    // Final status hardening check
-    const updatedTeam = await prisma.team.findUnique({ where: { id: team.id } });
-    const isQualified = 
-      updatedTeam.memberCount >= 4 && 
-      updatedTeam.memberCount <= 5 &&
-      updatedTeam.femaleCount >= 1 && 
-      updatedTeam.domainSpecificCount >= 2;
-
-    if (isQualified && i < 4) { // Only confirm some to show difference
-      await prisma.team.update({
-        where: { id: team.id },
-        data: { teamStatus: 'CONFIRMED' }
-      });
-    }
-
-    // Add some join requests
-    const requester = verifiedStudents[verifiedStudents.length - 1 - i];
-    if (requester && requester.id !== leader.id) {
-      await prisma.joinRequest.create({
-        data: {
-          teamId: team.id,
-          studentId: requester.id,
-          status: 'PENDING'
-        }
-      }).catch(() => {}); // Ignore duplicates
-    }
-  }
-
-  console.log('--- DATABASE_SEEDING_COMPLETE ---');
-}
+const main = async () => {
+  log('start');
+  await seedRules();
+  await seedRoundControl();
+  await seedTaxonomy();
+  await seedAdmin();
+  await seedJuries();
+  await seedCoordinators();
+  await seedRegistry();
+  await cleanupInstitutions();
+  log('done');
+};
 
 main()
-  .catch(console.error)
+  .catch((err) => {
+    console.error('[seed] failed:', err);
+    process.exit(1);
+  })
   .finally(() => prisma.$disconnect());
